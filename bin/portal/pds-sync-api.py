@@ -104,45 +104,43 @@ def _already_downloaded(label_file: str, md5: str) -> bool:
     return False
 
 
-def _download(product: dict, download_path: str, force: bool = False) -> Tuple[bool, Optional[str]]:
-    '''Download the XML label for the given `product` to `download_path`.
+def _download_file(file_url: str, download_path: str, file_type: str = 'file') -> Tuple[bool, Optional[str]]:
+    '''Download a file from `file_url` to `download_path` with retry logic.
 
-    Note that this'll skip labels that have already been downloaded unless `force` is True.
+    Args:
+        file_url: The URL to download from
+        download_path: The base directory to download to
+        file_type: Description of file type for logging (e.g., 'label', 'inventory')
 
     Returns a tuple of (success: bool, error_msg: Optional[str]).
     '''
-    props = product['properties']
-    label_url, md5 = props['ops:Label_File_Info.ops:file_ref'][0], props['ops:Label_File_Info.ops:md5_checksum'][0]
-    label_file = os.path.join(download_path, urllib.parse.urlparse(label_url).path[1:])
-    if not force and _already_downloaded(label_file, md5):
-        _logger.debug("Already downloaded %s and it's intact, so skipping it", label_file)
-        return (True, None)
+    local_file = os.path.join(download_path, urllib.parse.urlparse(file_url).path[1:])
 
     # Retry logic: attempt download up to _max_retries times
     last_error = None
     for attempt in range(1, _max_retries + 1):
         try:
-            _logger.debug('Downloading label %s (attempt %d/%d)', label_url, attempt, _max_retries)
-            response = requests.get(label_url)
+            _logger.debug('Downloading %s %s (attempt %d/%d)', file_type, file_url, attempt, _max_retries)
+            response = requests.get(file_url)
             if response.status_code != HTTPStatus.OK:
                 error_msg = f'Unexpected status {response.status_code}'
-                _logger.warning('%s while trying to download %s', error_msg, label_url)
+                _logger.warning('%s while trying to download %s', error_msg, file_url)
                 last_error = error_msg
                 if attempt < _max_retries:
                     _logger.info('Retrying in %d seconds...', _retry_delay)
                     time.sleep(_retry_delay)
                 continue
 
-            os.makedirs(os.path.dirname(label_file), exist_ok=True)
-            with open(label_file, 'wb') as io:
+            os.makedirs(os.path.dirname(local_file), exist_ok=True)
+            with open(local_file, 'wb') as io:
                 for buf in response.iter_content(chunk_size=_bufsiz):
                     io.write(buf)
-            _logger.debug('Successfully downloaded %s', label_url)
+            _logger.debug('Successfully downloaded %s to %s', file_type, local_file)
             return (True, None)
 
         except requests.exceptions.RequestException as e:
             error_msg = f'Network error: {e}'
-            _logger.warning('%s while downloading %s', error_msg, label_url)
+            _logger.warning('%s while downloading %s', error_msg, file_url)
             last_error = error_msg
             if attempt < _max_retries:
                 _logger.info('Retrying in %d seconds...', _retry_delay)
@@ -150,8 +148,46 @@ def _download(product: dict, download_path: str, force: bool = False) -> Tuple[b
             continue
 
     # All retries exhausted
-    _logger.error('Failed to download %s after %d attempts: %s', label_url, _max_retries, last_error)
+    _logger.error('Failed to download %s after %d attempts: %s', file_url, _max_retries, last_error)
     return (False, last_error)
+
+
+def _download(product: dict, download_path: str, force: bool = False) -> Tuple[bool, Optional[str]]:
+    '''Download the XML label and data files (if applicable) for the given `product` to `download_path`.
+
+    For Product_Collection products, this will also download the inventory file.
+
+    Note that this'll skip labels that have already been downloaded unless `force` is True.
+
+    Returns a tuple of (success: bool, error_msg: Optional[str]).
+    '''
+    props = product['properties']
+    label_url = props['ops:Label_File_Info.ops:file_ref'][0]
+    md5 = props['ops:Label_File_Info.ops:md5_checksum'][0]
+    label_file = os.path.join(download_path, urllib.parse.urlparse(label_url).path[1:])
+
+    # Check if already downloaded (unless force flag is set)
+    if not force and _already_downloaded(label_file, md5):
+        _logger.debug("Already downloaded %s and it's intact, so skipping it", label_file)
+        return (True, None)
+
+    # Download the label file
+    success, error_msg = _download_file(label_url, download_path, 'label')
+    if not success:
+        return (success, error_msg)
+
+    # For Product_Collection, also download the inventory file
+    product_class = props.get('product_class', [None])[0] if 'product_class' in props else None
+    if product_class == 'Product_Collection' and 'ops:Data_File_Info.ops:file_ref' in props:
+        data_file_refs = props['ops:Data_File_Info.ops:file_ref']
+        if data_file_refs:
+            inventory_url = data_file_refs[0]
+            _logger.info('Product_Collection detected, also downloading inventory file: %s', inventory_url)
+            inv_success, inv_error_msg = _download_file(inventory_url, download_path, 'inventory')
+            if not inv_success:
+                return (inv_success, f'Label downloaded but inventory failed: {inv_error_msg}')
+
+    return (True, None)
 
 
 def _download_labels(download_path: str, url: str, force: bool = False) -> List[Tuple[str, str]]:
