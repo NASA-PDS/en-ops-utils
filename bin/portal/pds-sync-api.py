@@ -120,7 +120,8 @@ def _download_file(file_url: str, download_path: str, file_type: str = 'file') -
     last_error = None
     for attempt in range(1, _max_retries + 1):
         try:
-            _logger.debug('Downloading %s %s (attempt %d/%d)', file_type, file_url, attempt, _max_retries)
+            _logger.info('Downloading %s: %s', file_type, file_url)
+            _logger.debug('  Attempt %d/%d', attempt, _max_retries)
             response = requests.get(file_url)
             if response.status_code != HTTPStatus.OK:
                 error_msg = f'Unexpected status {response.status_code}'
@@ -135,7 +136,8 @@ def _download_file(file_url: str, download_path: str, file_type: str = 'file') -
             with open(local_file, 'wb') as io:
                 for buf in response.iter_content(chunk_size=_bufsiz):
                     io.write(buf)
-            _logger.debug('Successfully downloaded %s to %s', file_type, local_file)
+            _logger.info('✓ Successfully downloaded %s', file_type)
+            _logger.debug('  Saved to: %s', local_file)
             return (True, None)
 
         except requests.exceptions.RequestException as e:
@@ -168,7 +170,8 @@ def _download(product: dict, download_path: str, force: bool = False) -> Tuple[b
 
     # Check if already downloaded (unless force flag is set)
     if not force and _already_downloaded(label_file, md5):
-        _logger.debug("Already downloaded %s and it's intact, so skipping it", label_file)
+        _logger.info("⊘ Skipping (already downloaded and intact)")
+        _logger.debug("  File: %s", label_file)
         return (True, None)
 
     # Download the label file
@@ -190,7 +193,7 @@ def _download(product: dict, download_path: str, force: bool = False) -> Tuple[b
     return (True, None)
 
 
-def _download_labels(download_path: str, url: str, force: bool = False) -> List[Tuple[str, str]]:
+def _download_products(download_path: str, url: str, force: bool = False) -> List[Tuple[str, str]]:
     '''Query the API at `url` and create matching XML labels in `download_path`.
 
     This follows Jordan's algorithm in NASA-PDS/registry-legacy-solr#135, namely:
@@ -204,7 +207,7 @@ def _download_labels(download_path: str, url: str, force: bool = False) -> List[
 
     Returns a list of (label_url, error_msg) tuples for failed downloads.
     '''
-    _logger.info('Downloading labels from %s to %s', url, download_path)
+    _logger.info('Downloading products from %s to %s', url, download_path)
     failed_downloads = []
     for product in _get_esa_psa_products(url):
         lidvid = _get_lidvid(product)
@@ -217,12 +220,12 @@ def _download_labels(download_path: str, url: str, force: bool = False) -> List[
 
 
 def easy_peasy(node_name: str, download_path: str, url: str, config: str, force: bool = False):
-    '''Download ESA-PSA ("easy peasy") harvest XML files and a harvest cfg file.'''
+    '''Download ESA-PSA ("easy peasy") product files and a harvest cfg file.'''
     _logger.debug('Making output directory %s as needed', download_path)
     os.makedirs(download_path, exist_ok=True)
 
     _write_harvest_config(node_name, download_path, config)
-    failed_downloads = _download_labels(download_path, url, force)
+    failed_downloads = _download_products(download_path, url, force)
 
     # Log summary of results
     if failed_downloads:
@@ -258,10 +261,15 @@ def main():
         '-f', '--force', action='store_true',
         help='Force download labels, skipping registry and already-downloaded checks'
     )
+    parser.add_argument(
+        '-v', '--verbose', action='store_true',
+        help='Enable verbose output (DEBUG level logging)'
+    )
     args = parser.parse_args()
 
-    # If this were a "real program", we'd let logging be configurable
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
+    # Configure logging based on verbose flag
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=log_level, format='%(levelname)s %(message)s')
 
     # The PDS API is really finicky about trailing slashes
     url = args.url[0:-1] if args.url.endswith('/') else args.url
