@@ -185,6 +185,16 @@ def _download(product: dict, download_path: str, force: bool = False) -> Tuple[b
         data_file_refs = props['ops:Data_File_Info.ops:file_ref']
         if data_file_refs:
             inventory_url = data_file_refs[0]
+            inventory_file = os.path.join(download_path, urllib.parse.urlparse(inventory_url).path[1:])
+
+            # Check if inventory file already exists with correct checksum
+            if 'ops:Data_File_Info.ops:md5_checksum' in props:
+                inventory_md5 = props['ops:Data_File_Info.ops:md5_checksum'][0]
+                if not force and _already_downloaded(inventory_file, inventory_md5):
+                    _logger.info('⊘ Skipping inventory (already downloaded and intact)')
+                    _logger.debug('  File: %s', inventory_file)
+                    return (True, None)
+
             _logger.info('Product_Collection detected, also downloading inventory file: %s', inventory_url)
             inv_success, inv_error_msg = _download_file(inventory_url, download_path, 'inventory')
             if not inv_success:
