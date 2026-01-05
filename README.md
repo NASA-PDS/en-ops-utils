@@ -4,7 +4,7 @@ This repository is a repo to track issues intended for the [Planetary Data Syste
 
 # Support
 
-For help with the PDS Engineering Node, you can either create a ticket in [GitHub Issues](https://github.com/NASA-PDS/pdsen-operations/issues) or email pds-operator@jpl.nasa.gov for more assistance.
+For help with the PDS Engineering Node, you can either create a ticket in [GitHub Issues](https://github.com/NASA-PDS/en-ops-utils/issues) or email pds-operator@jpl.nasa.gov for more assistance.
 
 
 # Installation
@@ -16,7 +16,7 @@ This section specifies the requirements needed to run the software in this repos
 
 Prior to installing this software, ensure your system meets the following requirements:
 
-- **Python 3**: This software requires Python 3. Python 3.9 is out now, and 3.10 is to be released imminently. Python 2 will absolutely not work, and indeed Python 2 came to its end of life January 2020.
+- **Python 3**: This software requires Python 3. Python 3.14 is out now. Python 2 will absolutely not work, and indeed Python 2 came to its end of life January 2020.
 
 Consult your operating system instructions or system administrator to install the required packages. For those without system administrator access and are feeling anxious, you could try a local (home directory) Python 3 installation using a Miniconda installation.
 
@@ -29,8 +29,8 @@ It's best install the tools virtual environment, so it won't interfere with—or
 
 ```console
 $ # Clone the repo or do a git pull if it already exists
-$ git clone https://github.com/NASA-PDS/pdsen-operations.git
-$ cd pdsen-operations
+$ git clone https://github.com/NASA-PDS/en-ops-utils.git
+$ cd en-ops-utils
 $ # For Linux, macOS, or other Unix systems:
 $ mkdir -p $HOME/.virtualenvs
 $ python3 -m venv $HOME/.virtualenvs/pdsen-ops
@@ -68,7 +68,7 @@ This software determines all the discipline LDDs to be included with this releas
 
 ## Configuration
 
-The [ldd-corral configuration](https://github.com/NASA-PDS/pdsen-operations/blob/master/conf/ldds/config.yml) can be modified to add additional discipline LDDs to the workflow.
+The [ldd-corral configuration](https://github.com/NASA-PDS/en-ops-utils/blob/master/conf/ldds/config.yml) can be modified to add additional discipline LDDs to the workflow.
 
 Format:
 ```
