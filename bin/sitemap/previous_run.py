@@ -1,1 +1,1 @@
-total_number_of_docs = 16091
+total_number_of_docs = 12604
