@@ -11,8 +11,8 @@
 # python3 bin/portal/pds-sync-api.py
 
 
-import logging, argparse, requests, os, hashlib, urllib
-from typing import Generator
+import logging, argparse, requests, os, hashlib, urllib, time
+from typing import Generator, Tuple, Optional, List
 from lxml import etree
 from http import HTTPStatus
 
@@ -29,6 +29,8 @@ _search_key      = 'ops:Harvest_Info.ops:harvest_date_time'
 _query_page_size = 50
 _psa_query       = '((product_class eq "Product_Context" or  product_class eq "Product_Bundle" or product_class eq "Product_Collection") and ops:Harvest_Info.ops:node_name like "PSA")'
 _bufsiz          = 512
+_max_retries     = 3
+_retry_delay     = 2  # seconds
 
 
 def _get_lidvid(product: dict) -> str:
@@ -102,30 +104,106 @@ def _already_downloaded(label_file: str, md5: str) -> bool:
     return False
 
 
-def _download(product: dict, download_path: str):
-    '''Download the XML label for the given `product` to `download_path`.
+def _download_file(file_url: str, download_path: str, file_type: str = 'file') -> Tuple[bool, Optional[str]]:
+    '''Download a file from `file_url` to `download_path` with retry logic.
 
-    Note that this'll skip labels that have already been downloaded.
+    Args:
+        file_url: The URL to download from
+        download_path: The base directory to download to
+        file_type: Description of file type for logging (e.g., 'label', 'inventory')
+
+    Returns a tuple of (success: bool, error_msg: Optional[str]).
+    '''
+    local_file = os.path.join(download_path, urllib.parse.urlparse(file_url).path[1:])
+
+    # Retry logic: attempt download up to _max_retries times
+    last_error = None
+    for attempt in range(1, _max_retries + 1):
+        try:
+            _logger.info('Downloading %s: %s', file_type, file_url)
+            _logger.debug('  Attempt %d/%d', attempt, _max_retries)
+            response = requests.get(file_url)
+            if response.status_code != HTTPStatus.OK:
+                error_msg = f'Unexpected status {response.status_code}'
+                _logger.warning('%s while trying to download %s', error_msg, file_url)
+                last_error = error_msg
+                if attempt < _max_retries:
+                    _logger.info('Retrying in %d seconds...', _retry_delay)
+                    time.sleep(_retry_delay)
+                continue
+
+            os.makedirs(os.path.dirname(local_file), exist_ok=True)
+            with open(local_file, 'wb') as io:
+                for buf in response.iter_content(chunk_size=_bufsiz):
+                    io.write(buf)
+            _logger.info('✓ Successfully downloaded %s', file_type)
+            _logger.debug('  Saved to: %s', local_file)
+            return (True, None)
+
+        except requests.exceptions.RequestException as e:
+            error_msg = f'Network error: {e}'
+            _logger.warning('%s while downloading %s', error_msg, file_url)
+            last_error = error_msg
+            if attempt < _max_retries:
+                _logger.info('Retrying in %d seconds...', _retry_delay)
+                time.sleep(_retry_delay)
+            continue
+
+    # All retries exhausted
+    _logger.error('Failed to download %s after %d attempts: %s', file_url, _max_retries, last_error)
+    return (False, last_error)
+
+
+def _download(product: dict, download_path: str, force: bool = False) -> Tuple[bool, Optional[str]]:
+    '''Download the XML label and data files (if applicable) for the given `product` to `download_path`.
+
+    For Product_Collection products, this will also download the inventory file.
+
+    Note that this'll skip labels that have already been downloaded unless `force` is True.
+
+    Returns a tuple of (success: bool, error_msg: Optional[str]).
     '''
     props = product['properties']
-    label_url, md5 = props['ops:Label_File_Info.ops:file_ref'][0], props['ops:Label_File_Info.ops:md5_checksum'][0]
+    label_url = props['ops:Label_File_Info.ops:file_ref'][0]
+    md5 = props['ops:Label_File_Info.ops:md5_checksum'][0]
     label_file = os.path.join(download_path, urllib.parse.urlparse(label_url).path[1:])
-    if _already_downloaded(label_file, md5):
-        _logger.debug("Already downloaded %s and it's intact, so skipping it", label_file)
-        return
 
-    _logger.debug('Downloading label %s', label_url)
-    response = requests.get(label_url)
-    if response.status_code != HTTPStatus.OK:
-        _logger.warning('Unexpected status %d while trying to download %s; skipping', response.status_code, label_url)
-        return
-    os.makedirs(os.path.dirname(label_file), exist_ok=True)
-    with open(label_file, 'wb') as io:
-        for buf in response.iter_content(chunk_size=_bufsiz):
-            io.write(buf)
+    # Check if already downloaded (unless force flag is set)
+    if not force and _already_downloaded(label_file, md5):
+        _logger.info("⊘ Skipping (already downloaded and intact)")
+        _logger.debug("  File: %s", label_file)
+        return (True, None)
+
+    # Download the label file
+    success, error_msg = _download_file(label_url, download_path, 'label')
+    if not success:
+        return (success, error_msg)
+
+    # For Product_Collection, also download the inventory file
+    product_class = props.get('product_class', [None])[0] if 'product_class' in props else None
+    if product_class == 'Product_Collection' and 'ops:Data_File_Info.ops:file_ref' in props:
+        data_file_refs = props['ops:Data_File_Info.ops:file_ref']
+        if data_file_refs:
+            inventory_url = data_file_refs[0]
+            inventory_file = os.path.join(download_path, urllib.parse.urlparse(inventory_url).path[1:])
+
+            # Check if inventory file already exists with correct checksum
+            if 'ops:Data_File_Info.ops:md5_checksum' in props:
+                inventory_md5 = props['ops:Data_File_Info.ops:md5_checksum'][0]
+                if not force and _already_downloaded(inventory_file, inventory_md5):
+                    _logger.info('⊘ Skipping inventory (already downloaded and intact)')
+                    _logger.debug('  File: %s', inventory_file)
+                    return (True, None)
+
+            _logger.info('Product_Collection detected, also downloading inventory file: %s', inventory_url)
+            inv_success, inv_error_msg = _download_file(inventory_url, download_path, 'inventory')
+            if not inv_success:
+                return (inv_success, f'Label downloaded but inventory failed: {inv_error_msg}')
+
+    return (True, None)
 
 
-def _download_labels(download_path: str, url: str):
+def _download_products(download_path: str, url: str, force: bool = False) -> List[Tuple[str, str]]:
     '''Query the API at `url` and create matching XML labels in `download_path`.
 
     This follows Jordan's algorithm in NASA-PDS/registry-legacy-solr#135, namely:
@@ -134,21 +212,43 @@ def _download_labels(download_path: str, url: str):
     2.  If not, check if we already downloaded an XML file for in in `download_path`
         -   Use the filename and ops:Label_File_Info.ops:md5_checksum
     3.  If not, then download to `download_path`
+
+    If `force` is True, all checks are skipped and labels are downloaded unconditionally.
+
+    Returns a list of (label_url, error_msg) tuples for failed downloads.
     '''
-    _logger.info('Downloading labels from %s to %s', url, download_path)
+    _logger.info('Downloading products from %s to %s', url, download_path)
+    failed_downloads = []
     for product in _get_esa_psa_products(url):
         lidvid = _get_lidvid(product)
-        if _exists_in_registry(lidvid, url): continue
-        _download(product, download_path)
+        if not force and _exists_in_registry(lidvid, url): continue
+        success, error_msg = _download(product, download_path, force)
+        if not success:
+            label_url = product['properties']['ops:Label_File_Info.ops:file_ref'][0]
+            failed_downloads.append((label_url, error_msg))
+    return failed_downloads
 
 
-def easy_peasy(node_name: str, download_path: str, url: str, config: str):
-    '''Download ESA-PSA ("easy peasy") harvest XML files and a harvest cfg file.'''
+def easy_peasy(node_name: str, download_path: str, url: str, config: str, force: bool = False):
+    '''Download ESA-PSA ("easy peasy") product files and a harvest cfg file.'''
     _logger.debug('Making output directory %s as needed', download_path)
     os.makedirs(download_path, exist_ok=True)
 
-    _write_harvest_config(node_name, download_path, config)    
-    _download_labels(download_path, url)
+    _write_harvest_config(node_name, download_path, config)
+    failed_downloads = _download_products(download_path, url, force)
+
+    # Log summary of results
+    if failed_downloads:
+        _logger.error('=' * 80)
+        _logger.error('DOWNLOAD SUMMARY: %d label(s) failed to download after %d retries', len(failed_downloads), _max_retries)
+        _logger.error('=' * 80)
+        for label_url, error_msg in failed_downloads:
+            _logger.error('  - %s: %s', label_url, error_msg)
+        _logger.error('=' * 80)
+    else:
+        _logger.info('=' * 80)
+        _logger.info('DOWNLOAD SUMMARY: All labels downloaded successfully!')
+        _logger.info('=' * 80)
 
 
 def main():
@@ -167,15 +267,24 @@ def main():
         '-c', '--config', default='harvest.cfg',
         help='What to call the harvest XML config output (default %(default)s)'
     )
+    parser.add_argument(
+        '-f', '--force', action='store_true',
+        help='Force download labels, skipping registry and already-downloaded checks'
+    )
+    parser.add_argument(
+        '-v', '--verbose', action='store_true',
+        help='Enable verbose output (DEBUG level logging)'
+    )
     args = parser.parse_args()
 
-    # If this were a "real program", we'd let logging be configurable
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
+    # Configure logging based on verbose flag
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=log_level, format='%(levelname)s %(message)s')
 
     # The PDS API is really finicky about trailing slashes
     url = args.url[0:-1] if args.url.endswith('/') else args.url
 
-    easy_peasy(args.node_name, args.download_path, url, args.config)
+    easy_peasy(args.node_name, args.download_path, url, args.config, args.force)
 
 
 if __name__ == '__main__':
