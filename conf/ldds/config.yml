@@ -46,6 +46,10 @@ ldd-nucspec:
   name: "Nuclear Spectroscopy"
   description: |
     The Nuclear Spectroscopy dictionary provides classes, attributes, and rules for describing the circumstances surrounding nuclear spectroscopy observations.
+ldd-ops:
+  name: "PDS Operations"
+  description: |
+    The PDS Operations dictionary contains operations metadata appended to PDS4 metadata in order to support PDS Core Services, such as the Registry.
 ldd-particle:
   description: |
     The Particle dictionary contains attributes that may be used to help identify particle parameters included in a PDS4 product to supplement the information provided in the Primary_Result_Summary and in order to support enhanced data discovery.
