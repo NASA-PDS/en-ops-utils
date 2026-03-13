@@ -8,6 +8,10 @@ ldd-ama:
 ldd-cart:
   description: |
     The Cartography Dictionary contains classes, elements, attributes, and rules describing map projections, including both cartographic and lander related definitions and descriptions. The PDS Cartography dictionary is based on and utilizes the existing Federal Geographic Data Committee (FGDC) Content Standard for Digital Geospatial Metadata, with modifications and extensions applied by PDS as needed for planetary mapping application.
+ldd-cots_camera:
+  name: "Commercial Off The Shelf Camera"
+  description: |
+    The COTS Camera dictionary is intended for metadata specific to Commercial Off The Shelf (COTS) cameras. It will often contain EXIF-type keywords specific to a given camera model. The intent is to hold metadata that does not fit elsewhere. For example, if the IMG LDD has a place to store the metadata, it should generally be used in preference to this LDD.
 ldd-ctli:
   name: "Context Type List: Instrument"
   description: |
