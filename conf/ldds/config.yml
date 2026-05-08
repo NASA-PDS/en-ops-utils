@@ -5,6 +5,10 @@ ldd-ama:
   name: "Atmospheres Modeling Annex"
   description: |
     The AMA dictionary provides attributes appropriate to atmospheric modeling products that will reside in the Atmospheres Modeling Annex.
+ldd-av:
+  name: "Audio_Video"
+  description: |
+    The Audio_Video (AV) LDD contains metadata related to audio and video products that use Encoded_Audio or Encoded_Video. The metadata in this LDD is a subset of what is in the stream itself (usually in the form of EXIF/XMP tags), in order to facilitate searching using standard PDS tools. Thus only attributes likely to be useful for search are included here. The use of this LDD is optional but recommended for AV data.
 ldd-cart:
   description: |
     The Cartography Dictionary contains classes, elements, attributes, and rules describing map projections, including both cartographic and lander related definitions and descriptions. The PDS Cartography dictionary is based on and utilizes the existing Federal Geographic Data Committee (FGDC) Content Standard for Digital Geospatial Metadata, with modifications and extensions applied by PDS as needed for planetary mapping application.
