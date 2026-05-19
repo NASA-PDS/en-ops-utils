@@ -52,6 +52,13 @@ BASE_CLONE_URL=git@github.com:pds-data-dictionaries
 GITHUB_API_URL="https://api.github.com/repos/pds-data-dictionaries"
 
 PR_BODY=$(cat <<EOF
+
+## Updates
+* Added new PDS4 version to pds4_versions.txt
+* New schemas "should" be generated automatically by the github actions
+
+---
+
 ## Steward Reviewer Checklist
 
 Before approving this PR, please verify the following:
