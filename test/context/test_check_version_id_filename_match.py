@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "bin" / "context"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts" / "context"))
 
 from check_version_id_filename_match import (
     check_version_id_filename_match,
