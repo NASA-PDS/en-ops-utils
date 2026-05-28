@@ -9,9 +9,10 @@ Operational scripts and utilities for the [PDS Engineering Node (EN)](https://na
 ## Setup
 
 ```bash
-python3 -m venv $HOME/.virtualenvs/pdsen-ops
-source $HOME/.virtualenvs/pdsen-ops/bin/activate
-pip3 install --requirement requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"          # installs packaged code + dev tools
+pip install -r requirements.txt  # additional deps for legacy scripts
 ```
 
 Required environment variables (set before running most scripts):
@@ -22,36 +23,39 @@ Required environment variables (set before running most scripts):
 ## Commands
 
 ```bash
-# Run tests
-pytest test/ -v
+# Run all tests
+pytest tests/ test/ -v
+
+# Run tox (full matrix + lint)
+tox
 
 # Run a single test file
 pytest test/context/test_check_duplicate_identifiers.py -v
 
-# Format code
-black bin/
+# Format packaged code
+black src/
 
-# Lint
-flake8 bin/
+# Lint packaged code
+flake8 src/
 
-# Type checking
-mypy bin/context/check_duplicate_identifiers.py
+# Type-check packaged code
+mypy src/
 ```
 
 ## Key Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `bin/ldds/ldd-corral.py` | Generates the PDS4 data dictionaries web page and stages all Discipline LDD releases; outputs to `/data/tmp/ldd-release/` |
-| `bin/ldds/update-ldd-actions.py` | Propagates GitHub Actions CI/CD workflow files from `ldd-template` to all Discipline LDD repos in `pds-data-dictionaries` org |
-| `bin/ldds/prep_for_ldd_release.sh` | Creates release branches in all Discipline LDD repos for a given PDS4 IM version |
-| `bin/repos/repo-corral.py` | Bulk-updates repos in the `NASA-PDS` org (e.g., propagating template changes) |
-| `bin/repos/update_templates.sh` / `update_action.sh` | Shell helpers for repo template propagation |
-| `bin/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
-| `bin/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
-| `bin/portal/pds-sync-api.py` | Downloads ESA PSA product XML files from the PDS search API for harvest |
-| `bin/sitemap/ds-view.py` | Sitemap/data set view utilities |
-| `bin/solr/deprecated_solr_registry_pds3_export.py` | Deprecated Solr export for PDS3 registry |
+| `scripts/ldds/ldd-corral.py` | Generates the PDS4 data dictionaries web page and stages all Discipline LDD releases; outputs to `/data/tmp/ldd-release/` |
+| `scripts/ldds/update-ldd-actions.py` | Propagates GitHub Actions CI/CD workflow files from `ldd-template` to all Discipline LDD repos in `pds-data-dictionaries` org |
+| `scripts/ldds/prep_for_ldd_release.sh` | Creates release branches in all Discipline LDD repos for a given PDS4 IM version |
+| `scripts/repos/repo-corral.py` | Bulk-updates repos in the `NASA-PDS` org (e.g., propagating template changes) |
+| `scripts/repos/update_templates.sh` / `update_action.sh` | Shell helpers for repo template propagation |
+| `scripts/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
+| `scripts/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
+| `scripts/portal/pds-sync-api.py` | Thin wrapper — logic lives in `src/pds/en_ops_utils/portal/pds_sync_api.py`; after install use the `pds-sync-api` console script |
+| `scripts/sitemap/ds-view.py` | Sitemap/data set view utilities |
+| `scripts/solr/deprecated_solr_registry_pds3_export.py` | Deprecated Solr export for PDS3 registry |
 
 ## LDD Configuration
 
@@ -59,6 +63,12 @@ mypy bin/context/check_duplicate_identifiers.py
 
 ## Architecture
 
-Scripts are standalone CLI tools with no shared internal library — each imports directly from third-party packages (`github3`, `lxml`, `PyGithub`, `pystache`, `pds.ldd_manager`). The `ldd-corral.py` script is the most complex: it uses `github3` to enumerate repos, `lxml` to parse IngestLDD XML, `pystache` templates to render the output HTML, and `lasso` to clone/checkout branches.
+The repo has a dual structure that will converge as scripts are migrated one by one:
 
-Tests live under `test/` and mirror the `bin/` structure. The test for `check_duplicate_identifiers.py` imports directly from `bin/context/` by manipulating `sys.path`.
+**Packaged code** (`src/pds/en_ops_utils/`) — scripts that have been converted to a proper `pds.en_ops_utils` Python package. Install with `pip install -e ".[dev]"`. Entry points are declared in `setup.cfg` under `[options.entry_points]`. Tests live under `tests/pds/en_ops_utils/` mirroring the package layout.
+
+**Legacy scripts** (`scripts/`) — standalone CLI tools not yet packaged. Each imports directly from third-party packages (`github3`, `lxml`, `PyGithub`, `pystache`, `pds.ldd_manager`). Install deps with `pip install -r requirements.txt`. Tests for these live under `test/` and use `sys.path` manipulation to import directly from `scripts/`.
+
+The `ldd-corral.py` script is the most complex legacy script: it uses `github3` to enumerate repos, `lxml` to parse IngestLDD XML, `pystache` templates to render the output HTML, and `lasso` to clone/checkout branches.
+
+**Packaging files**: `setup.cfg` (metadata + deps + entry points), `pyproject.toml` (build system + black config), `tox.ini` (test matrix + lint env), `MANIFEST.in` (package data).
