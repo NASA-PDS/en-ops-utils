@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "bin" / "context"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts" / "context"))
 
 from check_deprecated_lids import (
     check_deprecated_lids,
