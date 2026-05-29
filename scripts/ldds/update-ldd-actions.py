@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """LDD Corral.
 
-Tool to corral all the LDDs 
+Tool to corral all the LDDs
 """
 import logging
 import os

@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Script to update discipline LDD repos with the ldd-template Github action:
-# 
+#
 # * clone ldd-template repo
 # * loop through discipline LDD repos and:
 #   * clone the repo
 #   * copy the github action from the template repo to the LDD repo
 #   * push to master
-#   
+#
 
 DISCIPLINE_LDD_REPOS=ldd-multi ldd-particle ldd-wave ldd-rings ldd-img ldd-disp ldd-msn ldd-msn_surface ldd-proc ldd-img_surface ldd-ctli ldd-speclib ldd-msss_cam_mh ldd-cart ldd-geom ldd-spectral ldd-nucspec ldd-survey ldd-chan1
 BASE_CLONE_URL=git@github.com:pds-data-dictionaries

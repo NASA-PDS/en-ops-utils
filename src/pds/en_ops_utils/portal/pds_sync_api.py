@@ -1,6 +1,5 @@
 # encoding: utf-8
 """Sync ESA PSA products to Search API by downloading their XML label files."""
-
 import argparse
 import hashlib
 import logging

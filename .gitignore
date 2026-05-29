@@ -37,8 +37,6 @@ htmlcov
 *.iml
 .vscode
 *.sublime-*
-*.code-workspace
-
 
 # Shared objects (inc. Windows DLLs)
 *.dll
@@ -61,13 +59,15 @@ var/
 # other stuff
 *.log
 *.xpr
+bin/
 .*.swp
+typescript
+.ipynb_checkpoints
 
 # OS-specific artifacts
 .DS_Store
 ._*
-
-\#*\#
+*.bak
 
 # Exclusions
 !.coveragerc
@@ -76,6 +76,20 @@ var/
 !.gitignore
 !.gitkeep
 
-# Outputs from bin/portal/pds-sync-api.py
-harvest.cfg
-download/
+# detect-secrets
+.secrets.new
+
+# Project-specific
+pds_doi_service.ini
+doi_service.env
+allure/
+WhereAmI.py
+doi.db
+output/
+transaction_history/
+docs/Makefile
+docs/design/PDS-technical-architecture.pdf
+docs/make.bat
+doi_temp.db
+tests/aaDOI_production_submitted_labels.zip
+tests/aaDOI_production_submitted_labels/

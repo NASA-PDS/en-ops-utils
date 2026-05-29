@@ -1,13 +1,11 @@
 # encoding: utf-8
 """Tests for pds.en_ops_utils.portal.pds_sync_api."""
-
 import hashlib
 import os
 import tempfile
 
 import pytest
 from lxml import etree
-
 from pds.en_ops_utils.portal.pds_sync_api import _already_downloaded
 from pds.en_ops_utils.portal.pds_sync_api import _get_lidvid
 from pds.en_ops_utils.portal.pds_sync_api import _write_harvest_config
