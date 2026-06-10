@@ -5,7 +5,7 @@ from the PDS Search API and the PDS Solr registry.
 
 For each LID in the first column of the deprecated LIDs CSV, queries:
     GET https://pds.mcp.nasa.gov/api/search/1/products/{lid}
-    GET https://pds.nasa.gov/services/search/search?wt=json&q=lid:"{lid}"&rows=0
+    GET https://pds.nasa.gov/services/search/search?wt=json&q=*:*&fq=lid:"{lid}"&rows=0
 
 A 404 REST API response and a Solr numFound of 0 mean the LID was correctly
 removed. Any other result means the LID is still present and is a failure.
@@ -27,7 +27,6 @@ Returns:
 
 import argparse
 import csv
-import json
 import sys
 import time
 from pathlib import Path
@@ -93,7 +92,7 @@ def query_solr(lid: str, session: requests.Session) -> Tuple[int, str]:
         Tuple of (num_found, error_message).
         num_found is -1 and error_message is set on network/parse errors.
     """
-    params = {"wt": "json", "q": f'lid:"{lid}"', "rows": 0}
+    params = {"wt": "json", "q": "*:*", "fq": f'lid:"{lid}"', "rows": 0}
     try:
         response = session.get(SOLR_SEARCH_URL, params=params, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
@@ -105,7 +104,7 @@ def query_solr(lid: str, session: requests.Session) -> Tuple[int, str]:
         return -1, f"connection error: {e}"
     except requests.exceptions.HTTPError as e:
         return -1, f"HTTP error: {e}"
-    except json.JSONDecodeError as e:
+    except ValueError as e:
         return -1, f"response parse error: {e}"
     except KeyError as e:
         return -1, f"unexpected response structure, missing key: {e}"
@@ -216,7 +215,7 @@ def main() -> int:
             return 1
 
         lids = load_deprecated_lids(csv_path)
-        print(f"\n✅ All {len(lids)} deprecated LIDs correctly absent from REST API and Solr registry!")
+        print(f"\n✅ All {len(lids)} deprecated LIDs are absent from both the REST API and Solr registry!")
         return 0
 
     except Exception as e:
