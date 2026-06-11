@@ -51,12 +51,44 @@ fi
 BASE_CLONE_URL=git@github.com:pds-data-dictionaries
 GITHUB_API_URL="https://api.github.com/repos/pds-data-dictionaries"
 
-PR_JSON="{
-  \"title\": \"PDS4 Information Model Release $release\",
-  \"body\": \"Automated tagging of repo for nominal release of sub-model for PDS4 Release $release\",
-  \"head\": \"$BRANCH_NAME\",
-  \"base\": \"main\"
-}"
+PR_BODY=$(cat <<EOF
+
+## Updates
+* Added new PDS4 version to pds4_versions.txt
+* New schemas "should" be generated automatically by the github actions
+
+---
+
+## Steward Reviewer Checklist
+
+Before approving this PR, please verify the following:
+
+### 1. CI Build Passed
+- [ ] Confirm the LDD GitHub Actions build completed successfully — look for a green check next to the latest commit, or check the Actions tab
+
+### 2. Files Changed Tab Review
+Navigate to the **Files changed** tab of this PR and verify:
+- [ ] New LDD output files were generated (i.e., the build did not produce zero changes)
+- [ ] New LDD files reflect the new IM version number in their filenames (e.g., PDS4_<namespace>_${release}.*)
+- [ ] The IngestLDD source file (under src/) looks correct (if changed) — search the Files tab for IngestLDD to jump directly to it
+- [ ] Expected output formats are present: .xsd, .sch, .xml, .json, .zip
+
+### 3. Approve
+- [ ] Once all checks pass, submit your review approval from the **Files changed** tab
+
+### 4. Merge
+- [ ] The Steward must merge this PR for it to get tagged and be included in the release.
+
+Full review guidance: https://pds-data-dictionaries.github.io/development/ldd-how-to.html#reviewing-a-pull-request
+EOF
+)
+
+PR_JSON=$(jq -n \
+  --arg title "PDS4 Information Model Release $release" \
+  --arg body  "$PR_BODY" \
+  --arg head  "$BRANCH_NAME" \
+  --arg base  "main" \
+  '{title: $title, body: $body, head: $head, base: $base}')
 
 cd /tmp || exit
 
