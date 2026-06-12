@@ -11,9 +11,10 @@ This repo also contains operational scripts used by the EN team to fulfill the a
 ### Setup
 
 ```bash
-python3 -m venv $HOME/.virtualenvs/pdsen-ops
-source $HOME/.virtualenvs/pdsen-ops/bin/activate
-pip3 install --requirement requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --editable ".[dev]"          # packaged scripts (pds-sync-api, etc.)
+pip install --requirement requirements.txt  # legacy scripts not yet packaged
 ```
 
 Required environment variables:
@@ -25,13 +26,13 @@ Required environment variables:
 
 | Script | Purpose |
 |--------|---------|
-| `bin/ldds/ldd-corral.py` | Generates the [PDS4 data dictionaries web page](https://pds.nasa.gov/datastandards/dictionaries/index.shtml) and stages all Discipline LDD releases |
-| `bin/ldds/update-ldd-actions.py` | Propagates GitHub Actions workflows from `ldd-template` to all Discipline LDD repos |
-| `bin/ldds/prep_for_ldd_release.sh` | Creates release branches in all Discipline LDD repos for a given PDS4 IM version |
-| `bin/repos/repo-corral.py` | Bulk-updates repos in the `NASA-PDS` org (e.g., propagating template changes) |
-| `bin/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
-| `bin/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
-| `bin/portal/pds-sync-api.py` | Downloads ESA PSA product XML files from the PDS search API for harvest |
+| `scripts/ldds/ldd-corral.py` | Generates the [PDS4 data dictionaries web page](https://pds.nasa.gov/datastandards/dictionaries/index.shtml) and stages all Discipline LDD releases |
+| `scripts/ldds/update-ldd-actions.py` | Propagates GitHub Actions workflows from `ldd-template` to all Discipline LDD repos |
+| `scripts/ldds/prep_for_ldd_release.sh` | Creates release branches in all Discipline LDD repos for a given PDS4 IM version |
+| `scripts/repos/repo-corral.py` | Bulk-updates repos in the `NASA-PDS` org (e.g., propagating template changes) |
+| `scripts/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
+| `scripts/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
+| `scripts/portal/pds-sync-api.py` | Downloads ESA PSA product XML files from the PDS search API for harvest |
 
 ### ldd-corral.py
 
@@ -40,8 +41,8 @@ Autonomously generates the PDS4 data dictionaries web page for each PDS4 Build, 
 **Configuration** — `conf/ldds/config.yml` maps GitHub repo names to display name/description overrides for the generated web page.
 
 ```bash
-source $HOME/.virtualenvs/pdsen-ops/bin/activate
-ldd-corral.py --pds4_version 1.15.0.0 --token $GITHUB_TOKEN
+source .venv/bin/activate
+scripts/ldds/ldd-corral.py --pds4_version 1.15.0.0 --token $GITHUB_TOKEN
 ```
 
 Default outputs: web page at `/tmp/ldd-release/dd-summary.html`, LDD files under `/tmp/ldd-release/pds4/`.
@@ -49,15 +50,17 @@ Default outputs: web page at `/tmp/ldd-release/dd-summary.html`, LDD files under
 ### pds-stats.py
 
 ```bash
-bin/pds-stats.py --github_repos validate mi-label transform --token $GITHUB_TOKEN
+scripts/pds-stats.py --github_repos validate mi-label transform --token $GITHUB_TOKEN
 ```
 
-### pds-sync-api.py
+### pds-sync-api
 
-Downloads ESA PSA product XML files from the PDS search API and generates a harvest config:
+Downloads ESA PSA product XML files from the PDS search API and generates a harvest config. Installed as a console script via `pip install -e .`:
 
 ```bash
-bin/portal/pds-sync-api.py --node-name psa --download-path download/
+pds-sync-api --node-name psa --download-path download/
+# or run the script directly:
+scripts/portal/pds-sync-api.py --node-name psa --download-path download/
 ```
 
 ### NSSDCA Status Checker
@@ -69,7 +72,7 @@ Monitors PDS4 package status in NSSDCA, updates GitHub issues with status commen
 Scans PDS4 context XML files for duplicate `logical_identifier` values:
 
 ```bash
-python3 bin/context/check_duplicate_identifiers.py [path/to/xml/files] [--verbose]
+python3 scripts/context/check_duplicate_identifiers.py [path/to/xml/files] [--verbose]
 ```
 
 Exit code `0` = no duplicates; `1` = duplicates found or error.
@@ -79,8 +82,28 @@ Exit code `0` = no duplicates; `1` = duplicates found or error.
 ## Development
 
 ```bash
-pytest test/ -v       # run tests
-black bin/            # format
-flake8 bin/           # lint
-mypy bin/context/check_duplicate_identifiers.py  # type check
+pytest tests/ test/ -v   # run all tests
+tox                       # run full test matrix + lint
+black src/                # format packaged code
+flake8 src/               # lint packaged code
+mypy src/                 # type-check packaged code
+```
+
+### Secret Detection
+
+This repo uses [`detect-secrets`](https://github.com/Yelp/detect-secrets) to prevent credentials from being committed. The pre-commit hook runs automatically after `pre-commit install` (see Setup above).
+
+**Per-repo exclusions** live in [`.detect-secrets-ignore`](.detect-secrets-ignore) — one regex per line, `#` for comments. Add paths or filename patterns there when a file legitimately contains placeholder/example values that trigger false positives.
+
+**Workflow:**
+
+```bash
+# Re-scan after adding new files or updating .detect-secrets-ignore
+scripts/detect_secrets_baseline.sh scan
+
+# Interactively audit flagged secrets (mark each as real or false positive)
+scripts/detect_secrets_baseline.sh audit
+
+# Manual check (same as the pre-commit hook)
+scripts/detect_secrets_baseline.sh
 ```
