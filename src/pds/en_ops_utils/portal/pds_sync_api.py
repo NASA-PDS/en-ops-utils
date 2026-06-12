@@ -48,6 +48,7 @@ def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
     while True:
         _logger.debug("Making request to %s with params %r", url, params)
         r = requests.get(url, params=params)
+        r.raise_for_status()
         matches = r.json()["data"]
         num_matches = len(matches)
         for item in matches:
@@ -57,7 +58,7 @@ def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
         params["search-after"] = matches[-1]["properties"][_search_key]
 
 
-def _write_harvest_config(node_name: str, download_path: str, config: str) -> None:
+def _write_harvest_config(download_path: str, config: str) -> None:
     """Create the harvest config file."""
     root = etree.Element(
         "harvest",
@@ -205,7 +206,7 @@ def _download_products(download_path: str, url: str, force: bool = False) -> Lis
 def easy_peasy(node_name: str, download_path: str, url: str, config: str, force: bool = False) -> None:
     """Download ESA-PSA ("easy peasy") product files and write a harvest config file."""
     os.makedirs(download_path, exist_ok=True)
-    _write_harvest_config(node_name, download_path, config)
+    _write_harvest_config(download_path, config)
     failed = _download_products(download_path, url, force)
 
     sep = "=" * 80

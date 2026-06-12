@@ -24,7 +24,7 @@ Required environment variables (set before running most scripts):
 
 ```bash
 # Run all tests
-pytest tests/ test/ -v
+pytest --verbose tests/ test/
 
 # Run tox (full matrix + lint)
 tox

@@ -1,4 +1,4 @@
-# Legacy requirements for un-ported scripts in bin/.
+# Legacy requirements for un-ported scripts in scripts/.
 # For the packaged portal module, install via: pip install -e .[dev]
 PyGithub>=2.6.1
 requests>=2.32.3
@@ -7,4 +7,4 @@ black>=23.0.0
 flake8>=6.0.0
 mypy>=1.0.0
 pytest>=7.0.0
-lxml>=6.0.2
+lxml~=6.0.2

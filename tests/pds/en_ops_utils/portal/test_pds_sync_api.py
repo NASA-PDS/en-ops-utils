@@ -69,7 +69,7 @@ def test_write_harvest_config_creates_valid_xml():
     """Generated harvest config is valid XML with expected structure."""
     with tempfile.TemporaryDirectory() as tmp:
         config_path = os.path.join(tmp, "harvest.cfg")
-        _write_harvest_config("psa", tmp, config_path)
+        _write_harvest_config(tmp, config_path)
 
         assert os.path.isfile(config_path)
         tree = etree.parse(config_path)
@@ -83,7 +83,7 @@ def test_write_harvest_config_contains_registry_element():
     """Generated harvest config includes a registry element."""
     with tempfile.TemporaryDirectory() as tmp:
         config_path = os.path.join(tmp, "harvest.cfg")
-        _write_harvest_config("psa", tmp, config_path)
+        _write_harvest_config(tmp, config_path)
 
         tree = etree.parse(config_path)
         assert tree.getroot().find("registry") is not None
@@ -95,7 +95,7 @@ def test_write_harvest_config_nested_download_path():
         download_path = os.path.join(tmp, "subdir")
         os.makedirs(download_path)
         config_path = os.path.join(tmp, "harvest.cfg")
-        _write_harvest_config("psa", download_path, config_path)
+        _write_harvest_config(download_path, config_path)
 
         tree = etree.parse(config_path)
         path_text = tree.getroot().find("load/directories/path").text

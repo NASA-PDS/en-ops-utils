@@ -13,8 +13,8 @@ This repo also contains operational scripts used by the EN team to fulfill the a
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"          # packaged scripts (pds-sync-api, etc.)
-pip install -r requirements.txt  # legacy scripts not yet packaged
+pip install --editable ".[dev]"          # packaged scripts (pds-sync-api, etc.)
+pip install --requirement requirements.txt  # legacy scripts not yet packaged
 ```
 
 Required environment variables:
