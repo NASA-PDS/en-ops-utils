@@ -13,6 +13,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"          # installs packaged code + dev tools
 pip install -r requirements.txt  # additional deps for legacy scripts
+pre-commit install                # install commit hook
+pre-commit install --hook-type pre-push  # install pre-push hook (runs tests)
 ```
 
 Required environment variables (set before running most scripts):

@@ -88,3 +88,22 @@ black src/                # format packaged code
 flake8 src/               # lint packaged code
 mypy src/                 # type-check packaged code
 ```
+
+### Secret Detection
+
+This repo uses [`detect-secrets`](https://github.com/Yelp/detect-secrets) to prevent credentials from being committed. The pre-commit hook runs automatically after `pre-commit install` (see Setup above).
+
+**Per-repo exclusions** live in [`.detect-secrets-ignore`](.detect-secrets-ignore) — one regex per line, `#` for comments. Add paths or filename patterns there when a file legitimately contains placeholder/example values that trigger false positives.
+
+**Workflow:**
+
+```bash
+# Re-scan after adding new files or updating .detect-secrets-ignore
+scripts/detect_secrets_baseline.sh scan
+
+# Interactively audit flagged secrets (mark each as real or false positive)
+scripts/detect_secrets_baseline.sh audit
+
+# Manual check (same as the pre-commit hook)
+scripts/detect_secrets_baseline.sh
+```
