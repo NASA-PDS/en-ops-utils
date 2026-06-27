@@ -279,7 +279,7 @@ def main():
         metavar='',
         help='Output format. Accepts \'detailed\', \'summary\', or \'simple\'.',
         choices=['detailed', 'summary', 'simple'],
-        default='detailed'
+        default='simple'
     )
 
     args = parser.parse_args()
