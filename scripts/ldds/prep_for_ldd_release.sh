@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Script to update discipline LDD repos with the template Github action:
-# 
+#
 # * clone template repo
 # * loop through discipline LDD repos and:
 #   * clone the repo
 #   * copy the github action from the template repo to the LDD repo
 #   * push to main
-#   
+#
 
 usage () {
     echo "$(basename $0) <pds4_release_number> [<repo-name>]"
@@ -100,7 +100,7 @@ for repo in "${dLDDs[@]}"; do
     rm -fr "$repo"
     echo ">> cloning $repo repo"
     git clone $BASE_CLONE_URL/${repo}.git || continue
-    
+
     echo "copying github action"
     cp ldd-template/.github/workflows/*.yml "${repo}"/.github/workflows/
 

@@ -1,0 +1,56 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.0.1
+    hooks:
+    -   id: trailing-whitespace
+        exclude: REQUIREMENTS\.md$
+    -   id: end-of-file-fixer
+        exclude: REQUIREMENTS\.md$
+    -   id: check-executables-have-shebangs
+    -   id: check-merge-conflict
+    -   id: debug-statements
+    -   id: check-yaml
+        files: .*\.(yaml|yml)$
+
+-   repo: https://github.com/asottile/reorder_python_imports
+    rev: v2.6.0
+    hooks:
+    -   id: reorder-python-imports
+        files: ^src/|tests/
+
+# Disabling "black" for now as it's conflicting with reorder_python_imports
+# (They keep fighting over whether to have a blank line before imports)
+#
+# -   repo: local
+#     hooks:
+#     -   id: black
+#         name: black
+#         entry: black
+#         files: ^src/|tests/
+#         language: system
+#         types: [python]
+
+-   repo: local
+    hooks:
+    -   id: flake8
+        name: flake8
+        entry: flake8 src
+        language: system
+        pass_filenames: false
+
+-   repo: local
+    hooks:
+    -   id: tests
+        name: Tests
+        entry: .venv/bin/pytest
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+
+-   repo: local
+    hooks:
+    -   id: detect-secrets
+        name: detect-secrets
+        entry: scripts/detect_secrets_baseline.sh
+        language: script
+        pass_filenames: false
