@@ -38,7 +38,7 @@ jobs:
                     fetch-depth: 0
             -
                 name: 💵 Python Cache
-                uses: actions/cache@v4
+                uses: actions/cache@v6
                 with:
                     path: ~/.cache/pip
                     key: pds-${{runner.os}}-py-${{hashFiles('**/*.whl')}}
