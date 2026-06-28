@@ -11,7 +11,6 @@ from typing import List, Dict, Any
 
 import yaml
 from github3 import login
-from github3.pulls import ShortPullRequest
 
 # Github Org containing Discipline LDDs
 GITHUB_ORG = 'pds-data-dictionaries'
@@ -49,8 +48,8 @@ def load_ldd_repos(config_path: str, single_repo: str = None) -> List[str]:
         logger.warning(f'Config file not found at {config_path}, will check all repos in org')
         return repos
 
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f) or {}
 
     for repo_name in config.keys():
         if repo_name.startswith('ldd-') and repo_name not in DEV_LDDS:
@@ -131,11 +130,17 @@ def list_open_prs(gh, args) -> List[Dict[str, Any]]:
     repos_to_check = load_ldd_repos(config_path, args.repo)
 
     if not repos_to_check:
-        # If no config, check all repos in org
+        # If no config, check all LDD repos in org
         logger.info(f'Checking all repos in {args.github_org}...')
         org = gh.organization(args.github_org)
-        repos_to_check = [repo.name for repo in org.repositories()
-                         if repo.name not in SKIP_REPOS]
+        if not org:
+            logger.error(f'Could not access org: {args.github_org}')
+            return []
+        repos_to_check = [
+            repo.name
+            for repo in org.repositories()
+            if repo.name.startswith('ldd-') and repo.name not in SKIP_REPOS and repo.name not in DEV_LDDS
+        ]
     else:
         logger.info(f'Checking {len(repos_to_check)} repos from config...')
 
@@ -160,15 +165,23 @@ def list_open_prs(gh, args) -> List[Dict[str, Any]]:
                 # Check if this is a release PR
                 if pr.title == expected_pr_title or pr.head.ref == expected_branch:
                     repos_with_prs.add(repo_name)
-                    status = get_pr_status_summary(pr)
+
+                    # repo.pull_requests() returns ShortPullRequest objects; fetch the full PR
+                    # to access mergeability/review information when available.
+                    try:
+                        pr_obj = repo.pull_request(pr.number)
+                    except Exception:
+                        pr_obj = pr
+
+                    status = get_pr_status_summary(pr_obj)
 
                     pr_info = {
                         'repo': repo_name,
                         'pr_number': pr.number,
-                        'url': pr.html_url,
+                        'url': pr_obj.html_url,
                         'mergeable_state': status['mergeable_state'],
                         'review_status': status['review_status'],
-                        'reviews': status['reviews']
+                        'reviews': status['reviews'],
                     }
 
                     open_prs.append(pr_info)
