@@ -13,8 +13,17 @@ This repo also contains operational scripts used by the EN team to fulfill the a
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --editable ".[dev]"          # packaged scripts (pds-sync-api, etc.)
-pip install --requirement requirements.txt  # legacy scripts not yet packaged
+
+# Install options (choose based on what you need):
+pip install -e .                  # packaged code only (pds-sync-api)
+pip install -e ".[dev]"           # + development tools (pytest, black, flake8, etc.)
+pip install -e ".[scripts]"       # + legacy script dependencies (github3.py, pystache, etc.)
+pip install -r requirements.txt   # equivalent to -e ".[scripts]"
+pip install -e ".[dev,scripts]"   # everything (recommended for contributors)
+
+# Install pre-commit hooks (recommended):
+pre-commit install
+pre-commit install --hook-type pre-push
 ```
 
 Required environment variables:
