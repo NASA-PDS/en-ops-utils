@@ -44,11 +44,18 @@ def load_ldd_repos(config_path: str, single_repo: str = None) -> List[str]:
     if single_repo:
         return [single_repo]
 
-    if not os.path.exists(config_path):
-        logger.warning(f'Config file not found at {config_path}, will check all repos in org')
+    # Resolve to absolute path to prevent path traversal attacks
+    resolved_path = os.path.realpath(config_path)
+
+    if not os.path.exists(resolved_path):
+        logger.warning(f'Config file not found at {resolved_path}, will check all repos in org')
         return repos
 
-    with open(config_path, 'r', encoding='utf-8') as f:
+    if not os.path.isfile(resolved_path):
+        logger.error(f'Config path is not a file: {resolved_path}')
+        return repos
+
+    with open(resolved_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f) or {}
 
     for repo_name in config.keys():
