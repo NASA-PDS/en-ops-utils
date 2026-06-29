@@ -44,18 +44,28 @@ def load_ldd_repos(config_path: str, single_repo: str = None) -> List[str]:
     if single_repo:
         return [single_repo]
 
-    # Resolve to absolute path to prevent path traversal attacks
-    resolved_path = os.path.realpath(config_path)
+    # Validate path to prevent directory traversal attacks
+    # Get the project root (two levels up from this script)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.realpath(os.path.join(script_dir, '..', '..')) + os.sep
 
-    if not os.path.exists(resolved_path):
-        logger.warning(f'Config file not found at {resolved_path}, will check all repos in org')
+    # Resolve the config path to its canonical form
+    canonical_path = os.path.realpath(config_path)
+
+    # Ensure the resolved path is within the project directory
+    if not canonical_path.startswith(project_root):
+        logger.error(f'Access denied: config path outside project directory: {canonical_path}')
         return repos
 
-    if not os.path.isfile(resolved_path):
-        logger.error(f'Config path is not a file: {resolved_path}')
+    if not os.path.exists(canonical_path):
+        logger.warning(f'Config file not found at {canonical_path}, will check all repos in org')
         return repos
 
-    with open(resolved_path, 'r', encoding='utf-8') as f:
+    if not os.path.isfile(canonical_path):
+        logger.error(f'Config path is not a file: {canonical_path}')
+        return repos
+
+    with open(canonical_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f) or {}
 
     for repo_name in config.keys():
