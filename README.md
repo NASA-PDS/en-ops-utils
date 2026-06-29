@@ -15,11 +15,11 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Install options (choose based on what you need):
-pip install -e .                  # packaged code only (pds-sync-api)
-pip install -e ".[dev]"           # + development tools (pytest, black, flake8, etc.)
-pip install -e ".[scripts]"       # + legacy script dependencies (github3.py, pystache, etc.)
-pip install -r requirements.txt   # equivalent to -e ".[scripts]"
-pip install -e ".[dev,scripts]"   # everything (recommended for contributors)
+pip install --editable .                  # packaged code only (pds-sync-api)
+pip install --editable ".[dev]"           # + development tools (pytest, black, flake8, etc.)
+pip install --editable ".[scripts]"       # + legacy script dependencies (github3.py, pystache, etc.)
+pip install -r requirements.txt   	   # equivalent to pip install --editable ".[scripts]"
+pip install --editable ".[dev,scripts]"   # everything (recommended for contributors)
 
 # Install pre-commit hooks (recommended):
 pre-commit install
@@ -62,14 +62,14 @@ Default outputs: web page at `/tmp/ldd-release/dd-summary.html`, LDD files under
 Lists all open pull requests created by `prep_for_ldd_release.sh` for a given PDS4 release version. Useful for tracking LDD release progress and quickly accessing PRs that need review.
 
 ```bash
-# List all open PRs for a release (detailed format with review status)
+# List all open PRs for a release (simple format with URLs and repo names for easy copy/paste)
 scripts/ldds/list_open_release_prs.py 1.26.0.0 --token $GITHUB_TOKEN
 
 # Summary table format
 scripts/ldds/list_open_release_prs.py 1.26.0.0 --format summary --token $GITHUB_TOKEN
 
-# Simple format with URLs and repo names for easy copy/paste
-scripts/ldds/list_open_release_prs.py 1.26.0.0 --format simple --token $GITHUB_TOKEN
+# Detailed format with review status
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --format detailed --token $GITHUB_TOKEN
 
 # Check a specific repo only
 scripts/ldds/list_open_release_prs.py 1.26.0.0 --repo ldd-img --token $GITHUB_TOKEN

@@ -54,15 +54,15 @@ def load_ldd_repos(config_path: str, single_repo: str = None) -> List[str]:
 
     # Ensure the resolved path is within the project directory
     if not canonical_path.startswith(project_root):
-        logger.error(f'Access denied: config path outside project directory: {canonical_path}')
+        logger.error('Access denied: config path outside project directory: %s', canonical_path)
         return repos
 
     if not os.path.exists(canonical_path):
-        logger.warning(f'Config file not found at {canonical_path}, will check all repos in org')
+        logger.warning('Config file not found at %s, will check all repos in org', canonical_path)
         return repos
 
     if not os.path.isfile(canonical_path):
-        logger.error(f'Config path is not a file: {canonical_path}')
+        logger.error('Config path is not a file: %s', canonical_path)
         return repos
 
     with open(canonical_path, 'r', encoding='utf-8') as f:
@@ -122,7 +122,7 @@ def get_pr_status_summary(pr) -> Dict[str, Any]:
             else:
                 status_info['review_status'] = 'pending'
     except Exception as e:
-        logger.debug(f'Error getting PR status details: {e}')
+        logger.debug('Error getting PR status details: %s', e)
 
     return status_info
 
@@ -138,8 +138,8 @@ def list_open_prs(gh, args) -> List[Dict[str, Any]]:
     expected_pr_title = f"PDS4 Information Model Release {release_version}"
     expected_branch = f"release/{release_version}"
 
-    logger.info(f'Searching for open PRs with title: "{expected_pr_title}"')
-    logger.info(f'Expected branch: {expected_branch}')
+    logger.info('Searching for open PRs with title: "%s"', expected_pr_title)
+    logger.info('Expected branch: %s', expected_branch)
     logger.info('')
 
     # Get list of repos to check
@@ -148,15 +148,15 @@ def list_open_prs(gh, args) -> List[Dict[str, Any]]:
 
     # If the user explicitly provided a config path, treat it as required.
     if args.config and not repos_to_check:
-        logger.error(f'No repositories loaded from config file: {config_path}')
+        logger.error('No repositories loaded from config file: %s', config_path)
         sys.exit(2)
 
     if not repos_to_check:
         # If no config, check all LDD repos in org
-        logger.info(f'Checking all repos in {args.github_org}...')
+        logger.info('Checking all repos in %s...', args.github_org)
         org = gh.organization(args.github_org)
         if not org:
-            logger.error(f'Could not access org: {args.github_org}')
+            logger.error('Could not access org: %s', args.github_org)
             return []
         repos_to_check = [
             repo.name
@@ -164,7 +164,7 @@ def list_open_prs(gh, args) -> List[Dict[str, Any]]:
             if repo.name.startswith('ldd-') and repo.name not in SKIP_REPOS and repo.name not in DEV_LDDS
         ]
     else:
-        logger.info(f'Checking {len(repos_to_check)} repos from config...')
+        logger.info('Checking %d repos from config...', len(repos_to_check))
 
     open_prs = []
     repos_with_prs = set()
@@ -179,7 +179,7 @@ def list_open_prs(gh, args) -> List[Dict[str, Any]]:
         try:
             repo = gh.repository(args.github_org, repo_name)
             if not repo:
-                logger.warning(f'Could not access repo: {repo_name}')
+                logger.warning('Could not access repo: %s', repo_name)
                 continue
 
             # Get open pull requests
@@ -207,14 +207,14 @@ def list_open_prs(gh, args) -> List[Dict[str, Any]]:
                     }
 
                     open_prs.append(pr_info)
-                    logger.info(f'✓ Found PR in {repo_name}: #{pr.number}')
+                    logger.info('✓ Found PR in %s: #%d', repo_name, pr.number)
 
         except Exception as e:
-            logger.error(f'Error checking repo {repo_name}: {e}')
+            logger.error('Error checking repo %s: %s', repo_name, e)
             continue
 
     logger.info('')
-    logger.info(f'Checked {repos_checked} repos, found {len(repos_with_prs)} repos with open release PRs')
+    logger.info('Checked %d repos, found %d repos with open release PRs', repos_checked, len(repos_with_prs))
     logger.info('')
 
     return open_prs
@@ -335,7 +335,7 @@ def main():
         format_output(open_prs, args)
 
     except Exception as e:
-        logger.error(f'Error: {e}')
+        logger.error('Error: %s', e)
         import traceback
         traceback.print_exc()
         sys.exit(1)
