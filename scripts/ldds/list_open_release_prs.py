@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from pathlib import Path
 from typing import List, Dict, Any
 
 import yaml
@@ -22,7 +23,9 @@ SKIP_REPOS = ['ldd-template', 'PDS-Data-Dictionaries.github.io', 'dd-library', '
 DEV_LDDS = ['ldd-wave']
 
 # LDD configuration file
-LDD_CONFIG_PATH = os.path.join('..', '..', 'conf', 'ldds', 'config.yml')
+_SCRIPT_DIR = Path(__file__).parent
+_PROJECT_ROOT = _SCRIPT_DIR.parent.parent
+LDD_CONFIG_PATH = _PROJECT_ROOT / 'conf' / 'ldds' / 'config.yml'
 
 # Quiet github3 logging
 logger = logging.getLogger('github3')
@@ -45,27 +48,26 @@ def load_ldd_repos(config_path: str, single_repo: str = None) -> List[str]:
         return [single_repo]
 
     # Validate path to prevent directory traversal attacks
-    # Get the project root (two levels up from this script)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.realpath(os.path.join(script_dir, '..', '..')) + os.sep
-
     # Resolve the config path to its canonical form
-    canonical_path = os.path.realpath(config_path)
+    canonical_path = Path(config_path).resolve()
+    project_root = _PROJECT_ROOT.resolve()
 
     # Ensure the resolved path is within the project directory
-    if not canonical_path.startswith(project_root):
+    try:
+        canonical_path.relative_to(project_root)
+    except ValueError:
         logger.error('Access denied: config path outside project directory: %s', canonical_path)
         return repos
 
-    if not os.path.exists(canonical_path):
+    if not canonical_path.exists():
         logger.warning('Config file not found at %s, will check all repos in org', canonical_path)
         return repos
 
-    if not os.path.isfile(canonical_path):
+    if not canonical_path.is_file():
         logger.error('Config path is not a file: %s', canonical_path)
         return repos
 
-    with open(canonical_path, 'r', encoding='utf-8') as f:
+    with canonical_path.open('r', encoding='utf-8') as f:
         config = yaml.safe_load(f) or {}
 
     for repo_name in config.keys():
