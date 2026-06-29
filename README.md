@@ -29,6 +29,7 @@ Required environment variables:
 | `scripts/ldds/ldd-corral.py` | Generates the [PDS4 data dictionaries web page](https://pds.nasa.gov/datastandards/dictionaries/index.shtml) and stages all Discipline LDD releases |
 | `scripts/ldds/update-ldd-actions.py` | Propagates GitHub Actions workflows from `ldd-template` to all Discipline LDD repos |
 | `scripts/ldds/prep_for_ldd_release.sh` | Creates release branches in all Discipline LDD repos for a given PDS4 IM version |
+| `scripts/ldds/list_open_release_prs.py` | Lists open PRs created by `prep_for_ldd_release.sh` for a given PDS4 release version |
 | `scripts/repos/repo-corral.py` | Bulk-updates repos in the `NASA-PDS` org (e.g., propagating template changes) |
 | `scripts/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
 | `scripts/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
@@ -46,6 +47,24 @@ scripts/ldds/ldd-corral.py --pds4_version 1.15.0.0 --token $GITHUB_TOKEN
 ```
 
 Default outputs: web page at `/tmp/ldd-release/dd-summary.html`, LDD files under `/tmp/ldd-release/pds4/`.
+
+### list_open_release_prs.py
+
+Lists all open pull requests created by `prep_for_ldd_release.sh` for a given PDS4 release version. Useful for tracking LDD release progress and quickly accessing PRs that need review.
+
+```bash
+# List all open PRs for a release (detailed format with review status)
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --token $GITHUB_TOKEN
+
+# Summary table format
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --format summary
+
+# Simple format with URLs and repo names for easy copy/paste
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --format simple
+
+# Check a specific repo only
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --repo ldd-img
+```
 
 ### pds-stats.py
 
