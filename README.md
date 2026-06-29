@@ -66,13 +66,13 @@ Lists all open pull requests created by `prep_for_ldd_release.sh` for a given PD
 scripts/ldds/list_open_release_prs.py 1.26.0.0 --token $GITHUB_TOKEN
 
 # Summary table format
-scripts/ldds/list_open_release_prs.py 1.26.0.0 --format summary
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --format summary --token $GITHUB_TOKEN
 
 # Simple format with URLs and repo names for easy copy/paste
-scripts/ldds/list_open_release_prs.py 1.26.0.0 --format simple
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --format simple --token $GITHUB_TOKEN
 
 # Check a specific repo only
-scripts/ldds/list_open_release_prs.py 1.26.0.0 --repo ldd-img
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --repo ldd-img --token $GITHUB_TOKEN
 ```
 
 ### pds-stats.py

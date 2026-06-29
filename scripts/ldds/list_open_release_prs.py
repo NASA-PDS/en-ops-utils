@@ -115,10 +115,10 @@ def get_pr_status_summary(pr) -> Dict[str, Any]:
             ]
 
             # Overall review status
-            if any(state == 'APPROVED' for state in reviewer_states.values()):
-                status_info['review_status'] = 'approved'
-            elif any(state == 'CHANGES_REQUESTED' for state in reviewer_states.values()):
+            if any(state == 'CHANGES_REQUESTED' for state in reviewer_states.values()):
                 status_info['review_status'] = 'changes_requested'
+            elif any(state == 'APPROVED' for state in reviewer_states.values()):
+                status_info['review_status'] = 'approved'
             else:
                 status_info['review_status'] = 'pending'
     except Exception as e:
@@ -145,6 +145,11 @@ def list_open_prs(gh, args) -> List[Dict[str, Any]]:
     # Get list of repos to check
     config_path = args.config or LDD_CONFIG_PATH
     repos_to_check = load_ldd_repos(config_path, args.repo)
+
+    # If the user explicitly provided a config path, treat it as required.
+    if args.config and not repos_to_check:
+        logger.error(f'No repositories loaded from config file: {config_path}')
+        sys.exit(2)
 
     if not repos_to_check:
         # If no config, check all LDD repos in org
