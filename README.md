@@ -13,8 +13,17 @@ This repo also contains operational scripts used by the EN team to fulfill the a
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --editable ".[dev]"          # packaged scripts (pds-sync-api, etc.)
-pip install --requirement requirements.txt  # legacy scripts not yet packaged
+
+# Install options (choose based on what you need):
+pip install --editable .                  # packaged code only (pds-sync-api)
+pip install --editable ".[dev]"           # + development tools (pytest, black, flake8, etc.)
+pip install --editable ".[scripts]"       # + legacy script dependencies (github3.py, pystache, etc.)
+pip install -r requirements.txt   	   # equivalent to pip install --editable ".[scripts]"
+pip install --editable ".[dev,scripts]"   # everything (recommended for contributors)
+
+# Install pre-commit hooks (recommended):
+pre-commit install
+pre-commit install --hook-type pre-push
 ```
 
 Required environment variables:
@@ -29,6 +38,7 @@ Required environment variables:
 | `scripts/ldds/ldd-corral.py` | Generates the [PDS4 data dictionaries web page](https://pds.nasa.gov/datastandards/dictionaries/index.shtml) and stages all Discipline LDD releases |
 | `scripts/ldds/update-ldd-actions.py` | Propagates GitHub Actions workflows from `ldd-template` to all Discipline LDD repos |
 | `scripts/ldds/prep_for_ldd_release.sh` | Creates release branches in all Discipline LDD repos for a given PDS4 IM version |
+| `scripts/ldds/list_open_release_prs.py` | Lists open PRs created by `prep_for_ldd_release.sh` for a given PDS4 release version |
 | `scripts/repos/repo-corral.py` | Bulk-updates repos in the `NASA-PDS` org (e.g., propagating template changes) |
 | `scripts/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
 | `scripts/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
@@ -46,6 +56,24 @@ scripts/ldds/ldd-corral.py --pds4_version 1.15.0.0 --token $GITHUB_TOKEN
 ```
 
 Default outputs: web page at `/tmp/ldd-release/dd-summary.html`, LDD files under `/tmp/ldd-release/pds4/`.
+
+### list_open_release_prs.py
+
+Lists all open pull requests created by `prep_for_ldd_release.sh` for a given PDS4 release version. Useful for tracking LDD release progress and quickly accessing PRs that need review.
+
+```bash
+# List all open PRs for a release (simple format with URLs and repo names for easy copy/paste)
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --token $GITHUB_TOKEN
+
+# Summary table format
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --format summary --token $GITHUB_TOKEN
+
+# Detailed format with review status
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --format detailed --token $GITHUB_TOKEN
+
+# Check a specific repo only
+scripts/ldds/list_open_release_prs.py 1.26.0.0 --repo ldd-img --token $GITHUB_TOKEN
+```
 
 ### pds-stats.py
 

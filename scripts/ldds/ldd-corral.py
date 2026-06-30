@@ -13,13 +13,13 @@ import traceback
 
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from datetime import datetime
+from pathlib import Path
 
 import yaml
 from github3 import login
 from lxml import etree
 from shutil import rmtree
 
-from pkg_resources import resource_string
 from pystache import Renderer
 
 from pds.ldd_manager.util import Assets, LDDs, convert_pds4_version_to_alpha
@@ -73,10 +73,12 @@ NAMESPACES_WITHOUT_INGESTLDD = ['dart', 'vco', 'viper']
 LDD_TOC_TEMPLATE = '				<li><a href="#{}">{}</a></li>\n'
 
 # LDD configuration base directory
-LDD_CONF_DIR = os.path.join('..', '..', 'conf', 'ldds')
+_SCRIPT_DIR = Path(__file__).parent
+_PROJECT_ROOT = _SCRIPT_DIR.parent.parent
+LDD_CONF_DIR = _PROJECT_ROOT / 'conf' / 'ldds'
 
 # LDD templates dir
-LDD_TEMPLATES_DIR = os.path.join('..', '..', 'conf', 'ldds', 'templates')
+LDD_TEMPLATES_DIR = LDD_CONF_DIR / 'templates'
 
 # Quiet github3 logging
 logger = logging.getLogger('github3')
@@ -395,7 +397,7 @@ def generate_report(ldd_summary, pds4_version, pds4_alpha_version, output, confi
                                 'or create an issue in the <a href="{{issues_url}}">PDS4 LDD Issues Repository</a></i>')
         # Render this LDD section
         _renderer = Renderer(partials={'ldd_files': partial_template})
-        _template = resource_string(__name__, os.path.join(LDD_TEMPLATES_DIR, 'ldd.template.html'))
+        _template = (LDD_TEMPLATES_DIR / 'ldd.template.html').read_bytes()
         _ldd_html_block += _renderer.render(_template, _pystache_dict)
 
         # Build up LDD TOC
@@ -410,7 +412,7 @@ def generate_report(ldd_summary, pds4_version, pds4_alpha_version, output, confi
         }
 
         _renderer = Renderer()
-        _template = resource_string(__name__, os.path.join(LDD_TEMPLATES_DIR, 'dd-summary.template.shtml'))
+        _template = (LDD_TEMPLATES_DIR / 'dd-summary.template.shtml').read_bytes()
         html_str = _renderer.render(_template, _pystache_dict)
         f_out.write(html_str)
 
@@ -418,7 +420,9 @@ def generate_report(ldd_summary, pds4_version, pds4_alpha_version, output, confi
 
 
 def load_config():
-    _config = yaml.load(resource_string(__name__, os.path.join(LDD_CONF_DIR, 'config.yml')), Loader=yaml.FullLoader)
+    config_path = LDD_CONF_DIR / 'config.yml'
+    with open(config_path, 'r', encoding='utf-8') as f:
+        _config = yaml.load(f, Loader=yaml.FullLoader)
     return _config
 
 
