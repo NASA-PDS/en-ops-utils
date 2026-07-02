@@ -1,3 +1,0 @@
-# Legacy requirements for scripts/ directory
-# This installs the package plus script dependencies defined in setup.cfg [scripts]
--e .[scripts]
