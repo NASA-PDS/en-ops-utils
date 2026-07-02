@@ -18,7 +18,6 @@ source .venv/bin/activate
 pip install --editable .                  # packaged code only (pds-sync-api)
 pip install --editable ".[dev]"           # + development tools (pytest, black, flake8, etc.)
 pip install --editable ".[scripts]"       # + legacy script dependencies (github3.py, pystache, etc.)
-pip install -r requirements.txt   	   # equivalent to pip install --editable ".[scripts]"
 pip install --editable ".[dev,scripts]"   # everything (recommended for contributors)
 
 # Install pre-commit hooks (recommended):
