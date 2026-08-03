@@ -218,16 +218,53 @@ def _download_file(file_url: str, download_path: str, file_type: str = "file") -
     return (False, last_error)
 
 
-def _download(product: dict, download_path: str, force: bool = False) -> Tuple[bool, Optional[str]]:
+def _should_exclude_url(url: str, exclude_patterns: List[str]) -> bool:
+    """Check if URL path matches any exclude patterns.
+
+    Performs a simple substring search - if any pattern appears anywhere in the URL path,
+    the file is excluded. Patterns are NOT regex or globs, just literal strings.
+
+    Args:
+        url: Full URL to check (e.g., 'https://example.com/archive/nasa/pds/data/file.xml')
+        exclude_patterns: List of literal string patterns to search for in the path
+
+    Returns:
+        True if the URL should be excluded, False otherwise
+
+    Example:
+        >>> _should_exclude_url('https://ex.com/archive/nasa/pds/data.xml', ['nasa/pds'])
+        True  # 'nasa/pds' found in path '/archive/nasa/pds/data.xml'
+    """
+    if not exclude_patterns:
+        return False
+    url_path = urllib.parse.urlparse(url).path
+    for pattern in exclude_patterns:
+        if pattern in url_path:
+            _logger.debug("Excluding URL %s (matches pattern: %s)", url, pattern)
+            return True
+    return False
+
+
+def _download(product: dict, download_path: str, force: bool = False, exclude_patterns: Optional[List[str]] = None) -> Tuple[bool, Optional[str]]:
     """Download the XML label (and inventory, for Product_Collection) for ``product``.
 
     Skips labels already downloaded with a matching MD5 unless ``force`` is True.
+    Skips files whose URLs match any of the ``exclude_patterns``.
 
     Returns:
         A tuple of (success, error_msg). error_msg is None on success.
     """
+    if exclude_patterns is None:
+        exclude_patterns = []
+
     props = product["properties"]
     label_url = props["ops:Label_File_Info.ops:file_ref"][0]
+
+    # Check if label URL should be excluded
+    if _should_exclude_url(label_url, exclude_patterns):
+        _logger.info("Skipping label (excluded by pattern): %s", label_url)
+        return (True, None)
+
     md5 = props["ops:Label_File_Info.ops:md5_checksum"][0]
     label_file = os.path.join(download_path, urllib.parse.urlparse(label_url).path[1:])
 
@@ -244,6 +281,12 @@ def _download(product: dict, download_path: str, force: bool = False) -> Tuple[b
         data_file_refs = props["ops:Data_File_Info.ops:file_ref"]
         if data_file_refs:
             inventory_url = data_file_refs[0]
+
+            # Check if inventory URL should be excluded
+            if _should_exclude_url(inventory_url, exclude_patterns):
+                _logger.info("Skipping inventory (excluded by pattern): %s", inventory_url)
+                return (True, None)
+
             inventory_file = os.path.join(download_path, urllib.parse.urlparse(inventory_url).path[1:])
             if "ops:Data_File_Info.ops:md5_checksum" in props:
                 inventory_md5 = props["ops:Data_File_Info.ops:md5_checksum"][0]
@@ -258,33 +301,54 @@ def _download(product: dict, download_path: str, force: bool = False) -> Tuple[b
     return (True, None)
 
 
-def _download_products(download_path: str, url: str, force: bool = False) -> List[Tuple[str, str]]:
+def _download_products(download_path: str, url: str, force: bool = False, exclude_patterns: Optional[List[str]] = None) -> List[Tuple[str, str]]:
     """Query the API at ``url`` and download matching XML labels to ``download_path``.
 
     Implements the algorithm from NASA-PDS/registry-legacy-solr#135:
     check registry → check local MD5 → download.
 
+    Args:
+        download_path: Directory to save downloaded files.
+        url: PDS Search API URL.
+        force: If True, skip cached-file checks and re-download everything.
+        exclude_patterns: List of URL path patterns to exclude from download.
+
     Returns:
         A list of (label_url, error_msg) tuples for any failed downloads.
     """
+    if exclude_patterns is None:
+        exclude_patterns = []
+
+    if exclude_patterns:
+        _logger.info("Excluding URLs matching patterns: %s", ", ".join(exclude_patterns))
+
     _logger.info("Downloading products from %s to %s", url, download_path)
     failed: List[Tuple[str, str]] = []
     for product in _get_esa_psa_products(url):
         lidvid = _get_lidvid(product)
         if not force and _exists_in_registry(lidvid, url):
             continue
-        success, error_msg = _download(product, download_path, force)
+        success, error_msg = _download(product, download_path, force, exclude_patterns)
         if not success:
             label_url = product["properties"]["ops:Label_File_Info.ops:file_ref"][0]
             failed.append((label_url, error_msg or "unknown error"))
     return failed
 
 
-def easy_peasy(node_name: str, download_path: str, url: str, config: str, force: bool = False) -> None:
-    """Download ESA-PSA ("easy peasy") product files and write a harvest config file."""
+def easy_peasy(node_name: str, download_path: str, url: str, config: str, force: bool = False, exclude_patterns: Optional[List[str]] = None) -> None:
+    """Download ESA-PSA ("easy peasy") product files and write a harvest config file.
+
+    Args:
+        node_name: Name of the node (currently unused).
+        download_path: Directory to save downloaded files.
+        url: PDS Search API URL.
+        config: Path to write harvest configuration file.
+        force: If True, skip cached-file checks and re-download everything.
+        exclude_patterns: List of URL path patterns to exclude from download.
+    """
     os.makedirs(download_path, exist_ok=True)
     _write_harvest_config(download_path, config)
-    failed = _download_products(download_path, url, force)
+    failed = _download_products(download_path, url, force, exclude_patterns)
 
     sep = "=" * 80
     if failed:
@@ -301,7 +365,25 @@ def easy_peasy(node_name: str, download_path: str, url: str, config: str, force:
 
 def main() -> None:
     """Entry point for the pds-sync-api command."""
-    parser = argparse.ArgumentParser(description="Download ESA PSA product XML files from the PDS Search API")
+    parser = argparse.ArgumentParser(
+        description="Download ESA PSA product XML files from the PDS Search API",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Exclude files with 'nasa/pds' anywhere in the URL path
+  # (e.g., https://example.com/archive/nasa/pds/data/file.xml)
+  %(prog)s --exclude-patterns nasa/pds
+
+  # Exclude multiple patterns (any match excludes the file)
+  %(prog)s --exclude-patterns nasa/pds some/other/path
+
+  # Force re-download with exclusions
+  %(prog)s --force --exclude-patterns nasa/pds
+
+Note: Patterns are literal strings (not regex or globs) searched as substrings
+      anywhere in the URL path component.
+        """
+    )
     parser.add_argument("-n", "--node-name", default="psa", help="Name of the node (default: %(default)s)")
     parser.add_argument(
         "-p", "--download-path", default="download", help="Where to write downloaded XML files (default: %(default)s)"
@@ -311,6 +393,11 @@ def main() -> None:
     )
     parser.add_argument("-c", "--config", default="harvest.cfg", help="Harvest XML config output path (default: %(default)s)")
     parser.add_argument("-f", "--force", action="store_true", help="Force download, skipping all cached-file checks")
+    parser.add_argument(
+        "-e", "--exclude-patterns", nargs="+", metavar="PATTERN",
+        help="Exclude files if any pattern appears anywhere in the URL path (simple substring match, "
+             "not regex or glob). Example: 'nasa/pds' will exclude any URL containing that string in its path."
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable DEBUG-level logging")
     args = parser.parse_args()
 
@@ -318,7 +405,7 @@ def main() -> None:
 
     # The PDS API is finicky about trailing slashes
     url = args.url.rstrip("/")
-    easy_peasy(args.node_name, args.download_path, url, args.config, args.force)
+    easy_peasy(args.node_name, args.download_path, url, args.config, args.force, args.exclude_patterns)
 
 
 if __name__ == "__main__":
