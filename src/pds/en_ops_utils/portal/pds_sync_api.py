@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import logging
 import os
+import random
 import time
 import urllib.parse
 from http import HTTPStatus
@@ -31,6 +32,7 @@ _psa_query = (
 _bufsiz = 512
 _max_retries = 3
 _retry_delay = 2  # seconds
+_max_backoff_delay = 60  # seconds - cap for exponential backoff
 
 
 def _get_lidvid(product: dict) -> str:
@@ -42,13 +44,47 @@ def _get_lidvid(product: dict) -> str:
 
 
 def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
-    """Query the ESA PSA ("easy peasy") products from the registry."""
+    """Query the ESA PSA ("easy peasy") products from the registry.
+
+    Implements exponential backoff with jitter for rate limiting (429) responses.
+    """
     params: dict = {"sort": _search_key, "limit": _query_page_size, "q": _psa_query}
     _logger.info("Generating ESA-PSA products from %s", url)
     while True:
         _logger.debug("Making request to %s with params %r", url, params)
-        r = requests.get(url, params=params)
-        r.raise_for_status()
+
+        # Retry logic with exponential backoff for rate limiting
+        delay = _retry_delay
+        for attempt in range(1, _max_retries + 1):
+            try:
+                r = requests.get(url, params=params)
+                if r.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+                    if attempt < _max_retries:
+                        jittered_delay = delay * (0.5 + 0.5 * random.random())
+                        _logger.warning(
+                            "Rate limited (429) querying products, retrying in %.2fs (attempt %d/%d)",
+                            jittered_delay, attempt, _max_retries
+                        )
+                        time.sleep(jittered_delay)
+                        delay = min(delay * 2, _max_backoff_delay)
+                        continue
+                    else:
+                        r.raise_for_status()  # Will raise HTTPError
+                r.raise_for_status()
+                break  # Success - exit retry loop
+            except requests.exceptions.RequestException as e:
+                if attempt < _max_retries:
+                    jittered_delay = delay * (0.5 + 0.5 * random.random())
+                    _logger.warning(
+                        "Network error querying products: %s, retrying in %.2fs (attempt %d/%d)",
+                        e, jittered_delay, attempt, _max_retries
+                    )
+                    time.sleep(jittered_delay)
+                    delay = min(delay * 2, _max_backoff_delay)
+                    continue
+                else:
+                    raise
+
         matches = r.json()["data"]
         num_matches = len(matches)
         for item in matches:
@@ -79,15 +115,56 @@ def _write_harvest_config(download_path: str, config: str) -> None:
 
 
 def _exists_in_registry(lidvid: str, url: str) -> bool:
-    """Tell (true or false) if the given ``lidvid`` exists in the registry at ``url``."""
+    """Tell (true or false) if the given ``lidvid`` exists in the registry at ``url``.
+
+    Implements exponential backoff with jitter for rate limiting (429) responses.
+    """
     _logger.debug("Checking if lidvid %s is already in the registry", lidvid)
-    response = requests.head(f"{url}{lidvid}")
-    if response.status_code == HTTPStatus.OK:
-        return True
-    elif response.status_code == HTTPStatus.NOT_FOUND:
-        return False
-    else:
-        raise ValueError(f"Unexpected {response.status_code} while checking for existence of {lidvid}")
+
+    delay = _retry_delay
+    for attempt in range(1, _max_retries + 1):
+        try:
+            response = requests.head(f"{url}{lidvid}")
+
+            if response.status_code == HTTPStatus.OK:
+                return True
+            elif response.status_code == HTTPStatus.NOT_FOUND:
+                return False
+            elif response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+                if attempt < _max_retries:
+                    # Add jitter: random value between 50% and 100% of delay
+                    jittered_delay = delay * (0.5 + 0.5 * random.random())
+                    _logger.warning(
+                        "Rate limited (429) checking %s, retrying in %.2fs (attempt %d/%d)",
+                        lidvid, jittered_delay, attempt, _max_retries
+                    )
+                    time.sleep(jittered_delay)
+                    # Exponential backoff: double the delay for next iteration, capped at max
+                    delay = min(delay * 2, _max_backoff_delay)
+                    continue
+                else:
+                    raise ValueError(
+                        f"Rate limited (429) while checking existence of {lidvid} "
+                        f"after {_max_retries} attempts"
+                    )
+            else:
+                raise ValueError(
+                    f"Unexpected {response.status_code} while checking for existence of {lidvid}"
+                )
+        except requests.exceptions.RequestException as e:
+            if attempt < _max_retries:
+                jittered_delay = delay * (0.5 + 0.5 * random.random())
+                _logger.warning(
+                    "Network error checking %s: %s, retrying in %.2fs (attempt %d/%d)",
+                    lidvid, e, jittered_delay, attempt, _max_retries
+                )
+                time.sleep(jittered_delay)
+                delay = min(delay * 2, _max_backoff_delay)
+                continue
+            else:
+                raise ValueError(
+                    f"Network error checking existence of {lidvid} after {_max_retries} attempts: {e}"
+                )
 
 
 def _already_downloaded(label_file: str, md5: str) -> bool:
