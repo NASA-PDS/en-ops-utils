@@ -38,6 +38,28 @@ _max_backoff_delay = 60  # seconds - cap for exponential backoff
 _rng = secrets.SystemRandom()  # Cryptographically secure RNG for jitter
 
 
+def _validate_ip_address(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
+    """Validate that an IP address is safe for external requests.
+
+    Args:
+        ip: The IP address to validate
+
+    Raises:
+        ValueError: If the IP address is not safe for requests
+    """
+    if ip.is_private:
+        raise ValueError(f"Cannot make requests to private IP address: {ip}")
+
+    if ip.is_loopback:
+        raise ValueError(f"Cannot make requests to loopback address: {ip}")
+
+    if ip.is_link_local:
+        raise ValueError(f"Cannot make requests to link-local address: {ip}")
+
+    if ip.is_multicast or ip.is_reserved:
+        raise ValueError(f"Cannot make requests to reserved IP address: {ip}")
+
+
 def _validate_url(url: str) -> None:
     """Validate URL to prevent SSRF attacks.
 
@@ -73,23 +95,7 @@ def _validate_url(url: str) -> None:
             ip_str = addr[4][0]
             try:
                 ip = ipaddress.ip_address(ip_str)
-
-                # Block private IP ranges
-                if ip.is_private:
-                    raise ValueError(f"Cannot make requests to private IP address: {ip}")
-
-                # Block loopback addresses
-                if ip.is_loopback:
-                    raise ValueError(f"Cannot make requests to loopback address: {ip}")
-
-                # Block link-local addresses (including cloud metadata 169.254.169.254)
-                if ip.is_link_local:
-                    raise ValueError(f"Cannot make requests to link-local address: {ip}")
-
-                # Block multicast and reserved addresses
-                if ip.is_multicast or ip.is_reserved:
-                    raise ValueError(f"Cannot make requests to reserved IP address: {ip}")
-
+                _validate_ip_address(ip)
             except ValueError as e:
                 # ipaddress.ip_address() raised ValueError for invalid IP
                 raise ValueError(f"Invalid IP address for hostname {hostname}: {e}") from e
@@ -106,6 +112,84 @@ def _get_lidvid(product: dict) -> str:
         return product["id"]
 
 
+def _is_retryable_error(exception: requests.exceptions.RequestException) -> bool:
+    """Check if an HTTP exception should be retried.
+
+    Args:
+        exception: The exception to check
+
+    Returns:
+        True if the error is transient and should be retried, False otherwise
+    """
+    if not isinstance(exception, requests.exceptions.HTTPError):
+        return True  # Retry network errors, timeouts, etc.
+
+    if exception.response is None:
+        return True
+
+    status = exception.response.status_code
+    # Retry 5xx errors and 429 (rate limit), but not other 4xx (client errors)
+    return status >= 500 or status == HTTPStatus.TOO_MANY_REQUESTS
+
+
+def _handle_retry_delay(delay: float, operation: str, attempt: int, reason: str) -> float:
+    """Sleep with jittered exponential backoff and log retry attempt.
+
+    Args:
+        delay: Current delay in seconds
+        operation: Description of operation for logging
+        attempt: Current attempt number
+        reason: Reason for retry (for logging)
+
+    Returns:
+        Updated delay for next retry
+    """
+    jittered_delay = delay * (0.5 + 0.5 * _rng.random())
+    _logger.warning(
+        "%s %s, retrying in %.2fs (attempt %d/%d)",
+        reason, operation, jittered_delay, attempt, _max_retries
+    )
+    time.sleep(jittered_delay)
+    return min(delay * 2, _max_backoff_delay)
+
+
+def _make_request_with_retry(url: str, params: dict, operation: str) -> requests.Response:
+    """Make HTTP GET request with exponential backoff retry logic.
+
+    Args:
+        url: The URL to request
+        params: Query parameters
+        operation: Description of operation for logging (e.g., "querying products")
+
+    Returns:
+        Successful response object
+
+    Raises:
+        requests.exceptions.RequestException: On failure after all retries
+    """
+    delay = _retry_delay
+    for attempt in range(1, _max_retries + 1):
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+                if attempt < _max_retries:
+                    delay = _handle_retry_delay(delay, operation, attempt, "Rate limited (429)")
+                    continue
+                response.raise_for_status()  # Will raise HTTPError on last attempt
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as e:
+            if not _is_retryable_error(e):
+                raise  # Don't retry non-transient errors
+
+            if attempt < _max_retries:
+                delay = _handle_retry_delay(delay, operation, attempt, f"Network error: {e}")
+                continue
+            raise
+    # Should never reach here due to raise in loop, but for type safety
+    raise RuntimeError(f"Retry loop exhausted for {operation}")
+
+
 def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
     """Query the ESA PSA ("easy peasy") products from the registry.
 
@@ -120,49 +204,16 @@ def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
     while True:
         _logger.debug("Making request to %s with params %r", url, params)
 
-        # Retry logic with exponential backoff for rate limiting
-        delay = _retry_delay
-        for attempt in range(1, _max_retries + 1):
-            try:
-                r = requests.get(url, params=params, timeout=30)
-                if r.status_code == HTTPStatus.TOO_MANY_REQUESTS:
-                    if attempt < _max_retries:
-                        jittered_delay = delay * (0.5 + 0.5 * _rng.random())
-                        _logger.warning(
-                            "Rate limited (429) querying products, retrying in %.2fs (attempt %d/%d)",
-                            jittered_delay, attempt, _max_retries
-                        )
-                        time.sleep(jittered_delay)
-                        delay = min(delay * 2, _max_backoff_delay)
-                        continue
-                    else:
-                        r.raise_for_status()  # Will raise HTTPError
-                r.raise_for_status()
-                break  # Success - exit retry loop
-            except requests.exceptions.RequestException as e:
-                # Don't retry non-transient HTTP client errors (e.g., 4xx other than 429).
-                if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
-                    status = e.response.status_code
-                    if status < 500 and status != HTTPStatus.TOO_MANY_REQUESTS:
-                        raise
-
-                if attempt < _max_retries:
-                    jittered_delay = delay * (0.5 + 0.5 * _rng.random())
-                    _logger.warning(
-                        "Network error querying products: %s, retrying in %.2fs (attempt %d/%d)",
-                        e, jittered_delay, attempt, _max_retries
-                    )
-                    time.sleep(jittered_delay)
-                    delay = min(delay * 2, _max_backoff_delay)
-                    continue
-                raise
-
-        matches = r.json()["data"]
+        response = _make_request_with_retry(url, params, "querying products")
+        matches = response.json()["data"]
         num_matches = len(matches)
+
         for item in matches:
             yield item
+
         if num_matches < _query_page_size:
             break
+
         params["search-after"] = matches[-1]["properties"][_search_key]
 
 
@@ -186,6 +237,31 @@ def _write_harvest_config(download_path: str, config: str) -> None:
     etree.ElementTree(root).write(config, pretty_print=True, xml_declaration=True, encoding="UTF-8")
 
 
+def _check_registry_response(response: requests.Response, lidvid: str) -> Optional[bool]:
+    """Interpret registry HEAD response to determine if LIDVID exists.
+
+    Args:
+        response: HTTP response from registry HEAD request
+        lidvid: The LIDVID being checked (for error messages)
+
+    Returns:
+        True if exists, False if not found, None if should retry
+
+    Raises:
+        ValueError: For unexpected status codes or rate limit exhaustion
+    """
+    if response.status_code == HTTPStatus.OK:
+        return True
+    elif response.status_code == HTTPStatus.NOT_FOUND:
+        return False
+    elif response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+        return None  # Signal that retry is needed
+    else:
+        raise ValueError(
+            f"Unexpected {response.status_code} while checking for existence of {lidvid}"
+        )
+
+
 def _exists_in_registry(lidvid: str, url: str) -> bool:
     """Tell (true or false) if the given ``lidvid`` exists in the registry at ``url``.
 
@@ -198,50 +274,38 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
     _validate_url(url)
     _logger.debug("Checking if lidvid %s is already in the registry", lidvid)
 
+    check_url = f"{url}/{urllib.parse.quote(lidvid, safe='')}"
     delay = _retry_delay
+
     for attempt in range(1, _max_retries + 1):
         try:
-            response = requests.head(f"{url}/{urllib.parse.quote(lidvid, safe='')}", timeout=30)
+            response = requests.head(check_url, timeout=30)
+            result = _check_registry_response(response, lidvid)
 
-            if response.status_code == HTTPStatus.OK:
-                return True
-            elif response.status_code == HTTPStatus.NOT_FOUND:
-                return False
-            elif response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
-                if attempt < _max_retries:
-                    # Add jitter: random value between 50% and 100% of delay
-                    jittered_delay = delay * (0.5 + 0.5 * _rng.random())
-                    _logger.warning(
-                        "Rate limited (429) checking %s, retrying in %.2fs (attempt %d/%d)",
-                        lidvid, jittered_delay, attempt, _max_retries
-                    )
-                    time.sleep(jittered_delay)
-                    # Exponential backoff: double the delay for next iteration, capped at max
-                    delay = min(delay * 2, _max_backoff_delay)
-                    continue
-                else:
-                    raise ValueError(
-                        f"Rate limited (429) while checking existence of {lidvid} "
-                        f"after {_max_retries} attempts"
-                    )
+            if result is not None:
+                return result
+
+            # result is None means we got a 429 and should retry
+            if attempt < _max_retries:
+                delay = _handle_retry_delay(delay, f"checking {lidvid}", attempt, "Rate limited (429)")
+                continue
             else:
                 raise ValueError(
-                    f"Unexpected {response.status_code} while checking for existence of {lidvid}"
+                    f"Rate limited (429) while checking existence of {lidvid} "
+                    f"after {_max_retries} attempts"
                 )
+
         except requests.exceptions.RequestException as e:
             if attempt < _max_retries:
-                jittered_delay = delay * (0.5 + 0.5 * _rng.random())
-                _logger.warning(
-                    "Network error checking %s: %s, retrying in %.2fs (attempt %d/%d)",
-                    lidvid, e, jittered_delay, attempt, _max_retries
-                )
-                time.sleep(jittered_delay)
-                delay = min(delay * 2, _max_backoff_delay)
+                delay = _handle_retry_delay(delay, f"checking {lidvid}", attempt, f"Network error: {e}")
                 continue
             else:
                 raise ValueError(
                     f"Network error checking existence of {lidvid} after {_max_retries} attempts"
                 ) from e
+
+    # Should never reach here
+    raise RuntimeError(f"Retry loop exhausted while checking {lidvid}")
 
 
 def _already_downloaded(label_file: str, md5: str) -> bool:
@@ -322,6 +386,48 @@ def _should_exclude_url(url: str, exclude_patterns: List[str]) -> bool:
     return False
 
 
+def _download_product_collection_inventory(
+    props: dict, download_path: str, force: bool, exclude_patterns: List[str]
+) -> Tuple[bool, Optional[str]]:
+    """Download inventory file for Product_Collection products.
+
+    Args:
+        props: Product properties dictionary
+        download_path: Directory to save downloaded files
+        force: If True, skip cached-file checks
+        exclude_patterns: List of URL path patterns to exclude
+
+    Returns:
+        A tuple of (success, error_msg). error_msg is None on success.
+    """
+    data_file_refs = props.get("ops:Data_File_Info.ops:file_ref", [])
+    if not data_file_refs:
+        return (True, None)
+
+    inventory_url = data_file_refs[0]
+
+    # Check if inventory URL should be excluded
+    if _should_exclude_url(inventory_url, exclude_patterns):
+        _logger.info("Skipping inventory (excluded by pattern): %s", inventory_url)
+        return (True, None)
+
+    inventory_file = os.path.join(download_path, urllib.parse.urlparse(inventory_url).path[1:])
+
+    # Check if already downloaded
+    if "ops:Data_File_Info.ops:md5_checksum" in props:
+        inventory_md5 = props["ops:Data_File_Info.ops:md5_checksum"][0]
+        if not force and _already_downloaded(inventory_file, inventory_md5):
+            _logger.info("Skipping inventory (already downloaded and intact): %s", inventory_file)
+            return (True, None)
+
+    _logger.info("Product_Collection: also downloading inventory: %s", inventory_url)
+    inv_success, inv_error = _download_file(inventory_url, download_path, "inventory")
+    if not inv_success:
+        return (False, f"Label downloaded but inventory failed: {inv_error}")
+
+    return (True, None)
+
+
 def _download(product: dict, download_path: str, force: bool = False, exclude_patterns: Optional[List[str]] = None) -> Tuple[bool, Optional[str]]:
     """Download the XML label (and inventory, for Product_Collection) for ``product``.
 
@@ -353,27 +459,10 @@ def _download(product: dict, download_path: str, force: bool = False, exclude_pa
     if not success:
         return (success, error_msg)
 
+    # Handle Product_Collection inventory download
     product_class = props.get("product_class", [None])[0] if "product_class" in props else None
-    if product_class == "Product_Collection" and "ops:Data_File_Info.ops:file_ref" in props:
-        data_file_refs = props["ops:Data_File_Info.ops:file_ref"]
-        if data_file_refs:
-            inventory_url = data_file_refs[0]
-
-            # Check if inventory URL should be excluded
-            if _should_exclude_url(inventory_url, exclude_patterns):
-                _logger.info("Skipping inventory (excluded by pattern): %s", inventory_url)
-                return (True, None)
-
-            inventory_file = os.path.join(download_path, urllib.parse.urlparse(inventory_url).path[1:])
-            if "ops:Data_File_Info.ops:md5_checksum" in props:
-                inventory_md5 = props["ops:Data_File_Info.ops:md5_checksum"][0]
-                if not force and _already_downloaded(inventory_file, inventory_md5):
-                    _logger.info("Skipping inventory (already downloaded and intact): %s", inventory_file)
-                    return (True, None)
-            _logger.info("Product_Collection: also downloading inventory: %s", inventory_url)
-            inv_success, inv_error = _download_file(inventory_url, download_path, "inventory")
-            if not inv_success:
-                return (False, f"Label downloaded but inventory failed: {inv_error}")
+    if product_class == "Product_Collection":
+        return _download_product_collection_inventory(props, download_path, force, exclude_patterns)
 
     return (True, None)
 
@@ -487,7 +576,7 @@ Note: Patterns are literal strings (not regex or globs) searched as substrings
     try:
         _validate_url(url)
     except ValueError as e:
-        _logger.error("Invalid URL: %s", e)
+        _logger.exception("Invalid URL: %s", e)
         parser.exit(1, f"Error: {e}\n")
 
     easy_peasy(args.node_name, args.download_path, url, args.config, args.force, args.exclude_patterns)
