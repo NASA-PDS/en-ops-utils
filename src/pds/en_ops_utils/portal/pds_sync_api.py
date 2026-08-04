@@ -167,6 +167,7 @@ def _make_request_with_retry(url: str, params: dict, operation: str) -> requests
     Raises:
         requests.exceptions.RequestException: On failure after all retries
     """
+    _validate_url(url)  # SSRF protection
     delay = _retry_delay
     for attempt in range(1, _max_retries + 1):
         try:
@@ -271,9 +272,10 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
         lidvid: The LIDVID to check
         url: PDS Search API base URL (validated for SSRF protection)
     """
-    _validate_url(url)
+    _validate_url(url)  # SSRF protection: validate base URL
     _logger.debug("Checking if lidvid %s is already in the registry", lidvid)
 
+    # Construct full URL: base URL is validated above, lidvid is URL-encoded (no injection risk)
     check_url = f"{url}/{urllib.parse.quote(lidvid, safe='')}"
     delay = _retry_delay
 
