@@ -41,7 +41,7 @@ _rng = secrets.SystemRandom()  # Cryptographically secure RNG for jitter
 def _validate_ip_address(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
     """Validate that an IP address is safe for external requests.
 
-    Uses whitelist approach: only globally routable addresses are allowed.
+    Uses whitelist approach: only globally routable unicast addresses are allowed.
     Rejects private, loopback, link-local, multicast, reserved, unspecified,
     and CGNAT addresses.
 
@@ -52,10 +52,13 @@ def _validate_ip_address(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> N
         ValueError: If the IP address is not globally routable
     """
     # Only allow globally routable addresses (blocks private, loopback, link-local,
-    # multicast, reserved, CGNAT, documentation ranges, and unspecified addresses
-    # like 0.0.0.0/::).
+    # reserved, CGNAT, documentation ranges, and unspecified addresses like 0.0.0.0/::)
     if not ip.is_global:
         raise ValueError(f"Cannot make requests to non-global IP address: {ip}")
+
+    # Explicitly reject multicast (is_global=True for multicast, but not safe for SSRF)
+    if ip.is_multicast:
+        raise ValueError(f"Cannot make requests to multicast IP address: {ip}")
 
 
 def _validate_url(url: str) -> None:
