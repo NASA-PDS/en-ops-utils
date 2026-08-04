@@ -167,7 +167,10 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
                 time.sleep(jittered_delay)
                 delay = min(delay * 2, _max_backoff_delay)
                 continue
-                raise
+            else:
+                raise ValueError(
+                    f"Network error checking existence of {lidvid} after {_max_retries} attempts"
+                ) from e
 
 
 def _already_downloaded(label_file: str, md5: str) -> bool:
