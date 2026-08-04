@@ -2,9 +2,11 @@
 """Sync ESA PSA products to Search API by downloading their XML label files."""
 import argparse
 import hashlib
+import ipaddress
 import logging
 import os
 import secrets
+import socket
 import time
 import urllib.parse
 from http import HTTPStatus
@@ -36,6 +38,66 @@ _max_backoff_delay = 60  # seconds - cap for exponential backoff
 _rng = secrets.SystemRandom()  # Cryptographically secure RNG for jitter
 
 
+def _validate_url(url: str) -> None:
+    """Validate URL to prevent SSRF attacks.
+
+    Ensures the URL uses http/https scheme and doesn't target internal/private networks,
+    localhost, or cloud metadata services.
+
+    Args:
+        url: The URL to validate
+
+    Raises:
+        ValueError: If the URL is not safe for network requests
+    """
+    parsed = urllib.parse.urlparse(url)
+
+    # Only allow http/https schemes
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Invalid URL scheme '{parsed.scheme}': only http/https are allowed")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL must include a hostname")
+
+    # Block localhost variations
+    localhost_names = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+    if hostname.lower() in localhost_names:
+        raise ValueError(f"Cannot make requests to localhost: {hostname}")
+
+    # Resolve hostname and check IP address
+    try:
+        # Get all IP addresses for the hostname
+        addr_info = socket.getaddrinfo(hostname, None)
+        for addr in addr_info:
+            ip_str = addr[4][0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+
+                # Block private IP ranges
+                if ip.is_private:
+                    raise ValueError(f"Cannot make requests to private IP address: {ip}")
+
+                # Block loopback addresses
+                if ip.is_loopback:
+                    raise ValueError(f"Cannot make requests to loopback address: {ip}")
+
+                # Block link-local addresses (including cloud metadata 169.254.169.254)
+                if ip.is_link_local:
+                    raise ValueError(f"Cannot make requests to link-local address: {ip}")
+
+                # Block multicast and reserved addresses
+                if ip.is_multicast or ip.is_reserved:
+                    raise ValueError(f"Cannot make requests to reserved IP address: {ip}")
+
+            except ValueError as e:
+                # ipaddress.ip_address() raised ValueError for invalid IP
+                raise ValueError(f"Invalid IP address for hostname {hostname}: {e}") from e
+
+    except socket.gaierror as e:
+        raise ValueError(f"Cannot resolve hostname {hostname}: {e}") from e
+
+
 def _get_lidvid(product: dict) -> str:
     """Get the LIDVID from a ``product``."""
     try:
@@ -48,7 +110,11 @@ def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
     """Query the ESA PSA ("easy peasy") products from the registry.
 
     Implements exponential backoff with jitter for rate limiting (429) responses.
+
+    Args:
+        url: PDS Search API base URL (validated for SSRF protection)
     """
+    _validate_url(url)
     params: dict = {"sort": _search_key, "limit": _query_page_size, "q": _psa_query}
     _logger.info("Generating ESA-PSA products from %s", url)
     while True:
@@ -124,7 +190,12 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
     """Tell (true or false) if the given ``lidvid`` exists in the registry at ``url``.
 
     Implements exponential backoff with jitter for rate limiting (429) responses.
+
+    Args:
+        lidvid: The LIDVID to check
+        url: PDS Search API base URL (validated for SSRF protection)
     """
+    _validate_url(url)
     _logger.debug("Checking if lidvid %s is already in the registry", lidvid)
 
     delay = _retry_delay
@@ -411,6 +482,14 @@ Note: Patterns are literal strings (not regex or globs) searched as substrings
 
     # The PDS API is finicky about trailing slashes
     url = args.url.rstrip("/")
+
+    # Validate URL before making any requests (SSRF protection)
+    try:
+        _validate_url(url)
+    except ValueError as e:
+        _logger.error("Invalid URL: %s", e)
+        parser.exit(1, f"Error: {e}\n")
+
     easy_peasy(args.node_name, args.download_path, url, args.config, args.force, args.exclude_patterns)
 
 
