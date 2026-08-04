@@ -58,7 +58,7 @@ def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
         delay = _retry_delay
         for attempt in range(1, _max_retries + 1):
             try:
-                r = requests.get(url, params=params)
+                r = requests.get(url, params=params, timeout=30)
                 if r.status_code == HTTPStatus.TOO_MANY_REQUESTS:
                     if attempt < _max_retries:
                         jittered_delay = delay * (0.5 + 0.5 * _rng.random())
@@ -74,6 +74,12 @@ def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
                 r.raise_for_status()
                 break  # Success - exit retry loop
             except requests.exceptions.RequestException as e:
+                # Don't retry non-transient HTTP client errors (e.g., 4xx other than 429).
+                if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                    status = e.response.status_code
+                    if status < 500 and status != HTTPStatus.TOO_MANY_REQUESTS:
+                        raise
+
                 if attempt < _max_retries:
                     jittered_delay = delay * (0.5 + 0.5 * _rng.random())
                     _logger.warning(
@@ -83,8 +89,7 @@ def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
                     time.sleep(jittered_delay)
                     delay = min(delay * 2, _max_backoff_delay)
                     continue
-                else:
-                    raise
+                raise
 
         matches = r.json()["data"]
         num_matches = len(matches)
@@ -125,7 +130,7 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
     delay = _retry_delay
     for attempt in range(1, _max_retries + 1):
         try:
-            response = requests.head(f"{url}{lidvid}")
+            response = requests.head(f"{url}/{urllib.parse.quote(lidvid, safe='')}", timeout=30)
 
             if response.status_code == HTTPStatus.OK:
                 return True
@@ -162,10 +167,7 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
                 time.sleep(jittered_delay)
                 delay = min(delay * 2, _max_backoff_delay)
                 continue
-            else:
-                raise ValueError(
-                    f"Network error checking existence of {lidvid} after {_max_retries} attempts: {e}"
-                )
+                raise
 
 
 def _already_downloaded(label_file: str, md5: str) -> bool:
