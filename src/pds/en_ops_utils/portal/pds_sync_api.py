@@ -41,33 +41,32 @@ _rng = secrets.SystemRandom()  # Cryptographically secure RNG for jitter
 def _validate_ip_address(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
     """Validate that an IP address is safe for external requests.
 
+    Uses whitelist approach: only globally routable addresses are allowed.
+    Rejects private, loopback, link-local, multicast, reserved, unspecified,
+    and CGNAT addresses.
+
     Args:
         ip: The IP address to validate
 
     Raises:
-        ValueError: If the IP address is not safe for requests
+        ValueError: If the IP address is not globally routable
     """
-    if ip.is_private:
-        raise ValueError(f"Cannot make requests to private IP address: {ip}")
-
-    if ip.is_loopback:
-        raise ValueError(f"Cannot make requests to loopback address: {ip}")
-
-    if ip.is_link_local:
-        raise ValueError(f"Cannot make requests to link-local address: {ip}")
-
-    if ip.is_multicast or ip.is_reserved:
-        raise ValueError(f"Cannot make requests to reserved IP address: {ip}")
+    # Only allow globally routable addresses (blocks private, loopback, link-local,
+    # multicast, reserved, CGNAT, documentation ranges, and unspecified addresses
+    # like 0.0.0.0/::).
+    if not ip.is_global:
+        raise ValueError(f"Cannot make requests to non-global IP address: {ip}")
 
 
 def _validate_url(url: str) -> None:
     """Validate URL to prevent SSRF attacks.
 
     Ensures the URL uses http/https scheme and doesn't target internal/private networks,
-    localhost, or cloud metadata services.
+    localhost, or cloud metadata services. Requires a clean base URL without embedded
+    credentials, query parameters, or fragments.
 
     Args:
-        url: The URL to validate
+        url: The URL to validate (must be a base endpoint URL)
 
     Raises:
         ValueError: If the URL is not safe for network requests
@@ -82,6 +81,18 @@ def _validate_url(url: str) -> None:
     if not hostname:
         raise ValueError("URL must include a hostname")
 
+    # Reject embedded credentials (security risk + SSRF vector)
+    if parsed.username or parsed.password:
+        raise ValueError("URL must not contain embedded credentials (user:pass@host)")
+
+    # Reject query parameters (should use params dict instead)
+    if parsed.query:
+        raise ValueError("URL must not contain query parameters (use --url with base endpoint only)")
+
+    # Reject fragments (not meaningful for API base URLs)
+    if parsed.fragment:
+        raise ValueError("URL must not contain fragment (#anchor)")
+
     # Block localhost variations
     localhost_names = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
     if hostname.lower() in localhost_names:
@@ -93,12 +104,17 @@ def _validate_url(url: str) -> None:
         addr_info = socket.getaddrinfo(hostname, None)
         for addr in addr_info:
             ip_str = addr[4][0]
+
+            # Parse IP address (catch malformed IP strings)
             try:
                 ip = ipaddress.ip_address(ip_str)
-                _validate_ip_address(ip)
             except ValueError as e:
-                # ipaddress.ip_address() raised ValueError for invalid IP
+                # Parsing error - malformed IP string from DNS
                 raise ValueError(f"Invalid IP address for hostname {hostname}: {e}") from e
+
+            # Validate IP address policy (catch unsafe IPs like private/loopback)
+            # Policy errors already have clear messages, so let them propagate
+            _validate_ip_address(ip)
 
     except socket.gaierror as e:
         raise ValueError(f"Cannot resolve hostname {hostname}: {e}") from e
@@ -249,17 +265,22 @@ def _check_registry_response(response: requests.Response, lidvid: str) -> Option
         True if exists, False if not found, None if should retry
 
     Raises:
-        ValueError: For unexpected status codes or rate limit exhaustion
+        ValueError: For unexpected client error status codes (4xx other than 404/429)
     """
-    if response.status_code == HTTPStatus.OK:
+    status = response.status_code
+
+    if status == HTTPStatus.OK:
         return True
-    elif response.status_code == HTTPStatus.NOT_FOUND:
+    elif status == HTTPStatus.NOT_FOUND:
         return False
-    elif response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
-        return None  # Signal that retry is needed
+    elif status == HTTPStatus.TOO_MANY_REQUESTS:
+        return None  # Signal retry needed
+    elif status >= 500:
+        return None  # Treat 5xx server errors as transient/retryable
     else:
+        # Other 4xx client errors are non-retryable
         raise ValueError(
-            f"Unexpected {response.status_code} while checking for existence of {lidvid}"
+            f"Unexpected {status} while checking for existence of {lidvid}"
         )
 
 
@@ -287,13 +308,14 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
             if result is not None:
                 return result
 
-            # result is None means we got a 429 and should retry
+            # result is None means transient error (429 or 5xx) - retry
+            retry_reason = f"Transient error ({response.status_code})"
             if attempt < _max_retries:
-                delay = _handle_retry_delay(delay, f"checking {lidvid}", attempt, "Rate limited (429)")
+                delay = _handle_retry_delay(delay, f"checking {lidvid}", attempt, retry_reason)
                 continue
             else:
                 raise ValueError(
-                    f"Rate limited (429) while checking existence of {lidvid} "
+                    f"Transient error ({response.status_code}) while checking existence of {lidvid} "
                     f"after {_max_retries} attempts"
                 )
 
@@ -326,20 +348,26 @@ def _download_file(file_url: str, download_path: str, file_type: str = "file") -
     """Download a file from ``file_url`` to ``download_path`` with retry logic.
 
     Args:
-        file_url: The URL to download from.
+        file_url: The URL to download from (from API response).
         download_path: The base directory to download to.
         file_type: Description of file type for logging (e.g., 'label', 'inventory').
 
     Returns:
         A tuple of (success, error_msg). error_msg is None on success.
     """
+    # Validate URL for SSRF protection (defense-in-depth, even though URL comes from API)
+    try:
+        _validate_url(file_url)
+    except ValueError as e:
+        return (False, f"Invalid URL from API response: {e}")
+
     local_file = os.path.join(download_path, urllib.parse.urlparse(file_url).path[1:])
     last_error = None
     for attempt in range(1, _max_retries + 1):
         try:
             _logger.info("Downloading %s: %s", file_type, file_url)
             _logger.debug("  Attempt %d/%d", attempt, _max_retries)
-            response = requests.get(file_url)
+            response = requests.get(file_url, timeout=30)
             if response.status_code != HTTPStatus.OK:
                 last_error = f"Unexpected status {response.status_code}"
                 _logger.warning("%s while trying to download %s", last_error, file_url)
