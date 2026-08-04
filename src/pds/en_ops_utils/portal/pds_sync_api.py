@@ -4,7 +4,7 @@ import argparse
 import hashlib
 import logging
 import os
-import random
+import secrets
 import time
 import urllib.parse
 from http import HTTPStatus
@@ -33,6 +33,7 @@ _bufsiz = 512
 _max_retries = 3
 _retry_delay = 2  # seconds
 _max_backoff_delay = 60  # seconds - cap for exponential backoff
+_rng = secrets.SystemRandom()  # Cryptographically secure RNG for jitter
 
 
 def _get_lidvid(product: dict) -> str:
@@ -60,7 +61,7 @@ def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
                 r = requests.get(url, params=params)
                 if r.status_code == HTTPStatus.TOO_MANY_REQUESTS:
                     if attempt < _max_retries:
-                        jittered_delay = delay * (0.5 + 0.5 * random.random())
+                        jittered_delay = delay * (0.5 + 0.5 * _rng.random())
                         _logger.warning(
                             "Rate limited (429) querying products, retrying in %.2fs (attempt %d/%d)",
                             jittered_delay, attempt, _max_retries
@@ -74,7 +75,7 @@ def _get_esa_psa_products(url: str) -> Generator[dict, None, None]:
                 break  # Success - exit retry loop
             except requests.exceptions.RequestException as e:
                 if attempt < _max_retries:
-                    jittered_delay = delay * (0.5 + 0.5 * random.random())
+                    jittered_delay = delay * (0.5 + 0.5 * _rng.random())
                     _logger.warning(
                         "Network error querying products: %s, retrying in %.2fs (attempt %d/%d)",
                         e, jittered_delay, attempt, _max_retries
@@ -133,7 +134,7 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
             elif response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
                 if attempt < _max_retries:
                     # Add jitter: random value between 50% and 100% of delay
-                    jittered_delay = delay * (0.5 + 0.5 * random.random())
+                    jittered_delay = delay * (0.5 + 0.5 * _rng.random())
                     _logger.warning(
                         "Rate limited (429) checking %s, retrying in %.2fs (attempt %d/%d)",
                         lidvid, jittered_delay, attempt, _max_retries
@@ -153,7 +154,7 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
                 )
         except requests.exceptions.RequestException as e:
             if attempt < _max_retries:
-                jittered_delay = delay * (0.5 + 0.5 * random.random())
+                jittered_delay = delay * (0.5 + 0.5 * _rng.random())
                 _logger.warning(
                     "Network error checking %s: %s, retrying in %.2fs (attempt %d/%d)",
                     lidvid, e, jittered_delay, attempt, _max_retries
