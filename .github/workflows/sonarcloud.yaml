@@ -62,16 +62,6 @@ jobs:
                     echo '2️⃣ Running coverage xml'
                     coverage xml
                     echo '3️⃣ there is no step 3'
-            -
-                name: 📡 Sonar scan
-                uses: SonarSource/sonarcloud-github-action@v5
-                with:
-                    args: >
-                        -Dsonar.projectKey=NASA-PDS_en-ops-utils
-                        -Dsonar.organization=nasa-pds
-                        -Dsonar.python.coverage.reportPaths=coverage.xml
-                env:
-                    SONAR_TOKEN: ${{secrets.SONAR_TOKEN}}
 
 ...
 
