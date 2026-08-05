@@ -67,7 +67,7 @@ jobs:
                 uses: SonarSource/sonarcloud-github-action@v5
                 with:
                     args: >
-                        -Dsonar.projectKey=NASA-PDS_template-repo-python
+                        -Dsonar.projectKey=NASA-PDS_en-ops-utils
                         -Dsonar.organization=nasa-pds
                         -Dsonar.python.coverage.reportPaths=coverage.xml
                 env:
