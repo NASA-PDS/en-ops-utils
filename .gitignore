@@ -93,3 +93,4 @@ docs/make.bat
 doi_temp.db
 tests/aaDOI_production_submitted_labels.zip
 tests/aaDOI_production_submitted_labels/
+scripts/nssdca/aip-count.txt
