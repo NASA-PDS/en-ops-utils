@@ -300,7 +300,7 @@ def _exists_in_registry(lidvid: str, url: str) -> bool:
     _logger.debug("Checking if lidvid %s is already in the registry", lidvid)
 
     # Construct full URL: base URL is validated above, lidvid is URL-encoded (no injection risk)
-    check_url = f"{url}/{urllib.parse.quote(lidvid, safe='')}"
+    check_url = f"{url}/{urllib.parse.quote(str(lidvid), safe='')}"
     delay = _retry_delay
 
     for attempt in range(1, _max_retries + 1):
