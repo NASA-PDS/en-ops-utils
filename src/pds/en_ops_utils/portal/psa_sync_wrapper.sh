@@ -98,7 +98,7 @@ REQUIRED_VARS=(
 
 MISSING_VARS=()
 for var in "${REQUIRED_VARS[@]}"; do
-    if [ -z "${!var}" ]; then
+    if [ -z "${!var:-}" ]; then
         MISSING_VARS+=("$var")
     fi
 done
@@ -266,6 +266,17 @@ if [ "$DRY_RUN" = true ]; then
     echo "  REGISTRY_MGR_BIN: $REGISTRY_MGR_BIN"
     echo ""
     echo "Step-specific dependencies:"
+
+    # Helper needed here because the global definition appears later in the script.
+    step_is_enabled() {
+        local check_step=$1
+        for step in "${STEPS_TO_RUN[@]}"; do
+            if [ "$step" = "$check_step" ]; then
+                return 0
+            fi
+        done
+        return 1
+    }
 
     # Check step 1 dependencies (download)
     if step_is_enabled "$STEP_DOWNLOAD"; then
@@ -457,7 +468,7 @@ step_2_harvest() {
         echo "=== [$(date)] Step 2 completed successfully ($LABELS_REGISTERED labels = $DOCS_CREATED docs) ==="
     else
         echo "=== [$(date)] ERROR: Harvest validation failed! (Registered: $LABELS_REGISTERED, Created: $DOCS_CREATED) ===" >&2
-        exit ${HARVEST_EXIT:-1}
+        exit $(( HARVEST_EXIT != 0 ? HARVEST_EXIT : 1 ))
     fi
 }
 

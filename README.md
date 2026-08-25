@@ -93,11 +93,11 @@ Tools for syncing ESA PSA labels and managing portal data ingestion. See [Portal
 pds-sync-api --node-name psa --download-path /data/psa/
 
 # Automated workflow: download → harvest → load into registry
-psa_sync_wrapper.sh -c my-config.env
+bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env
 
 # Run only specific steps
-psa_sync_wrapper.sh -c my-config.env --download-labels
-psa_sync_wrapper.sh -c my-config.env --create-docs --load
+bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env --download-labels
+bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env --create-docs --load
 ```
 
 ### NSSDCA Status Checker
