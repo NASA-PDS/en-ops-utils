@@ -6,6 +6,18 @@ readonly STEP_DOWNLOAD=1
 readonly STEP_HARVEST=2
 readonly STEP_LOAD=3
 
+# --- Helper Functions ---
+# Check if a step is in the STEPS_TO_RUN array
+step_is_enabled() {
+    local check_step=$1
+    for step in "${STEPS_TO_RUN[@]}"; do
+        if [ "$step" = "$check_step" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # --- Usage ---
 usage() {
     cat <<EOF
@@ -267,17 +279,6 @@ if [ "$DRY_RUN" = true ]; then
     echo ""
     echo "Step-specific dependencies:"
 
-    # Helper needed here because the global definition appears later in the script.
-    step_is_enabled() {
-        local check_step=$1
-        for step in "${STEPS_TO_RUN[@]}"; do
-            if [ "$step" = "$check_step" ]; then
-                return 0
-            fi
-        done
-        return 1
-    }
-
     # Check step 1 dependencies (download)
     if step_is_enabled "$STEP_DOWNLOAD"; then
         echo "  Step 1 (download-labels):"
@@ -477,18 +478,6 @@ step_3_load() {
     echo "=== [$(date)] Step 3: Loading Solr Docs into Registry ==="
     "$REGISTRY_MGR_SOLR_HOME/bin/registry-mgr-solr" "$PDS4_SOLR_DOC_HOME/solr-docs"
     echo "=== [$(date)] Step 3 completed successfully ==="
-}
-
-# --- Helper Function ---
-# Check if a step is in the STEPS_TO_RUN array
-step_is_enabled() {
-    local check_step=$1
-    for step in "${STEPS_TO_RUN[@]}"; do
-        if [ "$step" = "$check_step" ]; then
-            return 0
-        fi
-    done
-    return 1
 }
 
 # --- Main Execution ---
