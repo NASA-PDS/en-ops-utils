@@ -58,7 +58,8 @@ REQUIRED ENVIRONMENT VARIABLES:
 
 OPTIONAL ENVIRONMENT VARIABLES:
     HOSTNAME_LABEL             Hostname label for email subject (default: hostname)
-    CONDA_ENV                  Conda environment name (default: none, skip conda)
+    CONDA_ENV                  Conda environment name (default: use system python)
+    CONDA_HOME                 Conda installation path (default: auto-detect)
     JAVA_HOME                  Java installation path (default: use system java)
     HARVEST_CONFIG_FILE        Harvest policy file (default: harvest-policy-ipda.xml)
     PSA_SYNC_EXCLUDES          Exclusion pattern for pds-sync-api (default: nasa/pds)
@@ -171,9 +172,11 @@ export PDS4_SOLR_DOC_HOME
 export REGISTRY_MGR_SOLR_HOME
 export EMAIL_RECIPIENTS
 
-# Optional environment variables
+# Optional environment variables (set defaults for set -u compatibility)
 HOSTNAME_LABEL="${HOSTNAME_LABEL:-$(hostname)}"
 CONDA_ENV="${CONDA_ENV:-}"
+CONDA_HOME="${CONDA_HOME:-}"
+JAVA_HOME="${JAVA_HOME:-}"
 HARVEST_CONFIG_FILE="${HARVEST_CONFIG_FILE:-harvest-policy-ipda.xml}"
 PSA_SYNC_EXCLUDES="${PSA_SYNC_EXCLUDES:-nasa/pds}"
 
@@ -260,8 +263,10 @@ else
     echo "Email notification: ENABLED (default)"
 fi
 
-# Dry-run mode - show configuration and exit
+# Dry-run mode - show configuration and validate dependencies
 if [ "$DRY_RUN" = true ]; then
+    VALIDATION_FAILED=false
+
     echo ""
     echo "=== DRY-RUN MODE - Configuration Summary ==="
     echo "Steps to execute: ${STEP_NAMES[*]}"
@@ -286,6 +291,7 @@ if [ "$DRY_RUN" = true ]; then
             echo "    ✓ Python: $(python --version 2>&1)"
         else
             echo "    ✗ Python: NOT FOUND (required for step 1)"
+            VALIDATION_FAILED=true
         fi
         if [ -n "$CONDA_ENV" ]; then
             echo "    ℹ Conda environment configured: $CONDA_ENV"
@@ -299,6 +305,7 @@ if [ "$DRY_RUN" = true ]; then
             echo "    ✓ Java: $(java -version 2>&1 | head -n 1)"
         else
             echo "    ✗ Java: NOT FOUND (required for step 2)"
+            VALIDATION_FAILED=true
         fi
     fi
 
@@ -309,9 +316,14 @@ if [ "$DRY_RUN" = true ]; then
     fi
 
     echo ""
-    echo "✓ Dry-run validation complete - configuration is valid"
-    echo "Run without --dry-run to execute"
-    exit 0
+    if [ "$VALIDATION_FAILED" = true ]; then
+        echo "✗ Dry-run validation failed - resolve issues before running"
+        exit 1
+    else
+        echo "✓ Dry-run validation complete - configuration is ready"
+        echo "Run without --dry-run to execute"
+        exit 0
+    fi
 fi
 
 # --- Email Notification Function ---
@@ -380,7 +392,7 @@ setup_environment() {
 step_1_download() {
     echo "=== [$(date)] Step 1: Downloading PSA Labels ==="
 
-    # Activate conda environment if specified (only needed for Python)
+    # Activate conda environment if specified (otherwise uses system python from PATH)
     if [ -n "$CONDA_ENV" ]; then
         echo "Activating conda environment: $CONDA_ENV"
         if [ -n "$CONDA_HOME" ]; then
@@ -391,8 +403,6 @@ step_1_download() {
                 source "$HOME/.conda/etc/profile.d/conda.sh"
             elif [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
                 source "/opt/conda/etc/profile.d/conda.sh"
-            elif [ -f "$CONDA_PREFIX/../etc/profile.d/conda.sh" ]; then
-                source "$CONDA_PREFIX/../etc/profile.d/conda.sh"
             else
                 echo "Warning: conda.sh not found, attempting direct conda activate" >&2
             fi
@@ -402,6 +412,8 @@ step_1_download() {
             echo "Error: Failed to activate conda environment: $CONDA_ENV" >&2
             exit 1
         fi
+    else
+        echo "Using system python from PATH"
     fi
 
     # Validate Python is available
@@ -423,10 +435,13 @@ step_1_download() {
 step_2_harvest() {
     echo "=== [$(date)] Step 2: Generating Solr Docs with Harvest ==="
 
-    # Setup JAVA_HOME if specified
+    # Setup JAVA_HOME if specified (otherwise uses system java from PATH)
     if [ -n "$JAVA_HOME" ]; then
         export JAVA_HOME
         export PATH="$JAVA_HOME/bin:$PATH"
+        echo "Using JAVA_HOME: $JAVA_HOME"
+    else
+        echo "Using system java from PATH"
     fi
 
     # Validate Java is available (required for harvest)

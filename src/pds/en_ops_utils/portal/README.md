@@ -65,7 +65,7 @@ cp psa_sync_wrapper.env.example /path/to/secure/my-config.env
 
 ```bash
 # 1. Source your configuration
-source /path/to/secure/my-config.env
+. /path/to/secure/my-config.env
 
 # 2. Run the script
 ./psa_sync_wrapper.sh
@@ -205,8 +205,9 @@ conda env list | grep my-env
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOSTNAME_LABEL` | `$(hostname)` | Hostname label for email subject |
-| `CONDA_ENV` | None | Conda environment name (skip conda if not set) |
-| `JAVA_HOME` | System java | Java installation path |
+| `CONDA_ENV` | None | Conda environment name (uses system python if not set) |
+| `CONDA_HOME` | Auto-detected | Conda installation path (tries standard locations) |
+| `JAVA_HOME` | System java | Java installation path (uses system java if not set) |
 | `HARVEST_CONFIG_FILE` | `harvest-policy-ipda.xml` | Harvest policy file name |
 | `PSA_SYNC_EXCLUDES` | `nasa/pds` | Exclusion pattern for pds-sync-api |
 | `JAVA_TOOL_OPTIONS` | `-Xms2g -Xmx8g` | JVM memory options |
@@ -251,7 +252,7 @@ The wrapper script is designed for cron automation. You can configure it to run 
 
 ```cron
 # Run daily at 2 AM
-0 2 * * * source /path/to/secure/my-config.env && /path/to/psa_sync_wrapper.sh
+0 2 * * * . /path/to/secure/my-config.env && /path/to/psa_sync_wrapper.sh
 ```
 
 ### Deployment Checklist
