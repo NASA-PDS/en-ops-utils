@@ -94,5 +94,6 @@ doi_temp.db
 tests/aaDOI_production_submitted_labels.zip
 tests/aaDOI_production_submitted_labels/
 
-# Config files
-src/pds/en_ops_utils/portal/psa_sync_wrapper.env
+# Config files (portal tools)
+src/pds/en_ops_utils/portal/*.env
+!src/pds/en_ops_utils/portal/*.env.example

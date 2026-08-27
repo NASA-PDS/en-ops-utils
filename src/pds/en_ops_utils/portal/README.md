@@ -50,6 +50,7 @@ Orchestrates three steps with validation, logging, and notifications:
 - Run all steps or select individual steps
 - Timestamped logs (console + file)
 - Email notifications with harvest summary
+- Success markers for multi-machine workflows
 - Optimized for automation (cron-ready)
 
 ---
@@ -112,6 +113,7 @@ chmod 600 dev.env
 | `HARVEST_CONFIG_FILE` | `harvest-policy-ipda.xml` | Harvest policy file |
 | `PSA_SYNC_EXCLUDES` | `nasa/pds` | Exclusion pattern for pds-sync-api |
 | `JAVA_TOOL_OPTIONS` | `-Xms2g -Xmx8g` | JVM memory options |
+| `SUCCESS_MARKER_FILE` | None | Success marker path for multi-machine coordination |
 
 ---
 
@@ -259,6 +261,88 @@ Email notification: Enabled
 
 ---
 
+## Multi-Machine Workflows
+
+**Use Case:** Development machine runs full pipeline (steps 1-3), production machine loads to production registry (step 3) after development completes.
+
+### Success Marker + Cron Pattern
+
+**Benefits:**
+- **Secure**: No SSH keys, no network access, production controls execution
+- **Lightweight**: Cron does scheduling, exits immediately if no work
+- **Simple**: Standard tools, easy to debug
+- **Efficient**: Only runs when needed, self-cleaning
+
+### Directory Structure
+
+Mirrored on both machines:
+```
+portal/
+  ├── psa_sync_wrapper.sh       # Wrapper script
+  ├── dev.env                    # Development config (.gitignore protected)
+  ├── prod.env                   # Production config (.gitignore protected)
+  ├── check_and_load.sh          # Production checker (prod only)
+  └── check_and_load.env         # Checker config (prod only, .gitignore protected)
+```
+
+Shared filesystem:
+```
+/shared/filesystem/.psa_sync_ready   # Marker: dev writes, prod reads
+```
+
+### Setup
+
+**1. Development Machine:**
+
+Create `dev.env` from template:
+```bash
+cp psa_sync_wrapper.env.example dev.env
+chmod 600 dev.env
+```
+
+Edit `dev.env`:
+```bash
+# ... standard configuration ...
+SUCCESS_MARKER_FILE="/shared/filesystem/.psa_sync_ready"
+```
+
+Run normally:
+```bash
+./psa_sync_wrapper.sh -c dev.env  # Creates marker on success
+```
+
+**2. Production Machine:**
+
+Create configuration files:
+```bash
+cp psa_sync_wrapper.env.example prod.env
+cp check_and_load.env.example check_and_load.env
+chmod 600 prod.env check_and_load.env
+```
+
+Edit `check_and_load.env`:
+```bash
+MARKER_FILE="/shared/filesystem/.psa_sync_ready"
+WRAPPER_SCRIPT="./psa_sync_wrapper.sh"  # Relative path (both in same directory)
+WRAPPER_CONFIG="./prod.env"              # Relative path
+MAX_AGE_HOURS=24
+```
+
+Add to crontab (use absolute paths in cron):
+```cron
+# Check every 4 hours
+0 */4 * * * cd /full/path/to/portal && ./check_and_load.sh -c check_and_load.env >> /var/log/psa-sync/check.log 2>&1
+```
+
+### How It Works
+
+1. Development runs full pipeline, creates marker on success
+2. Production cron checks for marker every 4 hours
+3. If marker exists and fresh, runs step 3 (load)
+4. Removes marker after successful load
+
+---
+
 ## Troubleshooting
 
 ### Bash Version Issues
@@ -385,6 +469,8 @@ sudo yum install mailx          # CentOS/RHEL
 | `pds_sync_api.py` | Python script for downloading PSA labels |
 | `psa_sync_wrapper.sh` | Bash wrapper for complete workflow |
 | `psa_sync_wrapper.env.example` | Template for wrapper configuration |
+| `check_and_load.sh` | Production checker for multi-machine coordination |
+| `check_and_load.env.example` | Template for checker configuration |
 | `README.md` | This documentation |
 
 ---

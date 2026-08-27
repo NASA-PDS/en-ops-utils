@@ -677,3 +677,22 @@ else
 fi
 
 echo "=== [$(date)] All requested steps completed successfully ==="
+
+# --- Post-Success Actions ---
+# Multi-machine coordination: Create marker file for production to detect completion
+# See check_and_load.env.example for detailed setup instructions
+if [ -n "$SUCCESS_MARKER_FILE" ]; then
+    echo "Creating success marker file: $SUCCESS_MARKER_FILE"
+    {
+        echo "# PSA Sync Success Marker"
+        echo "# This file signals that development pipeline completed successfully."
+        echo "# Production can now run step 3 (load into registry)."
+        echo "timestamp=$(date +%s)"
+        echo "datetime=$(date -Iseconds)"
+        echo "steps=${STEP_NAMES[*]}"
+        echo "log_file=$LOG_FILE"
+        echo "hostname=$HOSTNAME_LABEL"
+    } > "$SUCCESS_MARKER_FILE"
+    chmod 600 "$SUCCESS_MARKER_FILE"
+    echo "✓ Success marker created"
+fi
