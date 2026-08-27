@@ -2,192 +2,93 @@
 
 Tools for syncing PSA (Planetary Science Archive) labels and managing portal data ingestion.
 
-## Tools in this Directory
+## Tools
 
 ### pds-sync-api
 
-Downloads ESA PSA product XML files from the PDS search API and generates a harvest configuration file.
+Downloads ESA PSA product XML files from the PDS Search API.
 
 **Installation:**
-
 ```bash
-# Install from repository root
-pip install -e .
+pip install -e .  # From repository root
 ```
 
 **Usage:**
-
 ```bash
-# As console script (after pip install)
-pds-sync-api --download-path download/
-
-# Or run directly
-python pds_sync_api.py --download-path download/
+pds-sync-api --download-path /path/to/labels/
 ```
 
 **Options:**
-
 ```
---node-name, -n       Node name to query (default: psa)
---download-path, -p   Path to download XML files
---config, -c          Harvest config output path (default: harvest.cfg)
---exclude, -e         Exclusion pattern (e.g., nasa/pds)
+-p, --download-path PATH    Path to download XML files (required)
+-n, --node-name NAME        Node name to query (default: psa)
+-c, --config FILE           Harvest config output path (default: harvest.cfg)
+-e, --exclude-patterns STR  Exclusion patterns (e.g., nasa/pds)
+-f, --force                 Force re-download (skip cached files)
+-v, --verbose               Enable debug logging
 ```
-
-### psa_sync_wrapper.sh
-
-Automated wrapper script for the complete PSA label sync workflow. Orchestrates three steps:
-
-1. **Download PSA Labels** - Uses `pds-sync-api` to download labels
-2. **Create Solr Docs** - Runs Harvest to generate Solr documents
-3. **Load into Registry** - Loads Solr documents into the registry
-
-Designed for cron automation with comprehensive logging and email notifications.
 
 ---
 
-## Wrapper Script Documentation
+## psa_sync_wrapper.sh
 
-### Quick Start
+Wrapper script that automates the complete PSA label sync workflow.
 
-#### Option 1: Using Config File (Recommended for Cron)
+**Requirements:** Bash 4.0+ (for associative arrays)
+
+### What It Does
+
+Orchestrates three steps with validation, logging, and notifications:
+
+1. **Download** - Uses `pds-sync-api` to download PSA labels from PDS Search API
+2. **Harvest** - Generates Solr documents from labels using harvest-solr
+3. **Load** - Loads Solr documents into registry using registry-mgr-solr
+
+### Features
+
+- Fail-fast validation before execution
+- Run all steps or select individual steps
+- Timestamped logs (console + file)
+- Email notifications with harvest summary
+- Optimized for automation (cron-ready)
+
+---
+
+## Quick Start
+
+### 1. Create Configuration File
 
 ```bash
-# 1. Copy and customize the example config
-cp psa_sync_wrapper.env.example /path/to/secure/my-config.env
-# Edit my-config.env with your paths and settings
+# Copy template (can use local name)
+cp psa_sync_wrapper.env.example dev.env
 
-# 2. Run with config file
-./psa_sync_wrapper.sh --config /path/to/secure/my-config.env
+# Edit with your paths
+nano dev.env
+
+# Secure it
+chmod 600 dev.env
 ```
 
-#### Option 2: Source Environment Variables
+**Security:**
+- `.env` files are protected by `.gitignore` - safe to store locally
+- Always set restrictive permissions: `chmod 600 *.env`
+
+### 2. Run the Script
 
 ```bash
-# 1. Source your configuration
-. /path/to/secure/my-config.env
-
-# 2. Run the script
-./psa_sync_wrapper.sh
-```
-
-**Important:** Do NOT commit configuration files to the repository. Store them in a secure location outside the repo.
-
-### Configuration Best Practices
-
-Follow these practices to prevent common mistakes and ensure reliable operation:
-
-#### 1. Use Absolute Paths
-Relative paths can cause unexpected behavior depending on working directory.
-
-```bash
-# Good
-LOG_DIR="/var/log/psa-sync"
-
-# Avoid - depends on where script is run from
-LOG_DIR="./logs"
-```
-
-#### 2. Validate Configuration Before Production
-Use dry-run mode to validate your configuration without executing:
-
-```bash
-# Test configuration
-./psa_sync_wrapper.sh -c my-config.env --dry-run
-
-# If validation passes, test with single step
-./psa_sync_wrapper.sh -c my-config.env --download-labels
-```
-
-#### 3. Set Restrictive Permissions
-Prevent accidental overwrites and protect configuration:
-
-```bash
-chmod 600 my-config.env  # Only owner can read/write
-```
-
-#### 4. Store Configs Outside Repository
-Avoid accidental commits to version control:
-
-```bash
-# Store in system config directory
-/etc/psa-sync/production.env
-
-# Or in user directory
-~/.config/psa-sync/config.env
-```
-
-#### 5. Verify Email Recipients
-Check for typos in email addresses:
-
-```bash
-# Test email delivery works
-echo "Test message" | mail -s "Test" "$EMAIL_RECIPIENTS"
-```
-
-#### 6. Verify Directory Paths
-Ensure all required directories exist before running:
-
-```bash
-# Check directories exist
-for dir in "$LOG_DIR" "$PSA_SYNC_DATA_DIR" "$EN_OPS_UTILS_HOME"; do
-    [ -d "$dir" ] || echo "Error: Directory missing: $dir"
-done
-```
-
-#### 7. Test Environment Setup
-Verify all dependencies are available:
-
-```bash
-# Check Java
-java -version
-
-# Check Python
-python --version
-
-# Check conda (if using)
-conda env list | grep my-env
-```
-
-### Usage Examples
-
-```bash
-# Validate configuration (dry-run mode)
-./psa_sync_wrapper.sh -c my-config.env --dry-run
-
-# Run all three steps (default, email notification sent)
+# Run all three steps
 ./psa_sync_wrapper.sh -c my-config.env
 
-# Run only the download step (email notification sent)
+# Run only specific steps
 ./psa_sync_wrapper.sh -c my-config.env --download-labels
-
-# Run download only WITHOUT email (for testing)
-./psa_sync_wrapper.sh -c my-config.env -n --download-labels
-
-# Run harvest and load steps (auto-sorted to correct order: create docs → load)
-./psa_sync_wrapper.sh -c my-config.env --load --create-docs
-
-# Get help
-./psa_sync_wrapper.sh --help
+./psa_sync_wrapper.sh -c my-config.env --create-docs --load
 ```
 
-### Command-Line Options
+---
 
-| Option | Description |
-|--------|-------------|
-| `-c, --config FILE` | Load environment variables from config file |
-| `--download-labels` | Execute step 1: Download PSA labels |
-| `--create-docs` | Execute step 2: Run Harvest to create Solr docs |
-| `--load` | Execute step 3: Load Solr docs into registry |
-| `-n, --no-email` | Suppress email notification (default: always sent) |
-| `--dry-run` | Validate configuration and show what would run without executing |
-| `-h, --help` | Show help message |
+## Configuration
 
-**Note:** If no steps are specified, all three steps run by default.
-
-### Configuration
-
-#### Required Environment Variables
+### Required Variables
 
 | Variable | Description |
 |----------|-------------|
@@ -195,173 +96,301 @@ conda env list | grep my-env
 | `PSA_SYNC_DATA_DIR` | Directory for PSA label data |
 | `EN_OPS_UTILS_HOME` | Path to en-ops-utils repository |
 | `HARVEST_SOLR_HOME` | Path to harvest-solr installation |
-| `HARVEST_SOLR_CONF_HOME` | Path to harvest config directory |
-| `PDS4_SOLR_DOC_HOME` | Path for Solr document output |
-| `REGISTRY_MGR_SOLR_HOME` | Path to registry-manager-solr installation |
-| `EMAIL_RECIPIENTS` | Email addresses for notifications |
+| `HARVEST_SOLR_CONF_HOME` | Harvest config directory |
+| `PDS4_SOLR_DOC_HOME` | Solr document output directory |
+| `REGISTRY_MGR_SOLR_HOME` | Path to registry-manager-solr |
+| `EMAIL_RECIPIENTS` | Email addresses (comma-separated) |
 
-#### Optional Environment Variables
+### Optional Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HOSTNAME_LABEL` | `$(hostname)` | Hostname label for email subject |
-| `CONDA_ENV` | None | Conda environment name (uses system python if not set) |
-| `CONDA_HOME` | Auto-detected | Conda installation path (tries standard locations) |
-| `JAVA_HOME` | System java | Java installation path (uses system java if not set) |
-| `HARVEST_CONFIG_FILE` | `harvest-policy-ipda.xml` | Harvest policy file name |
+| `HOSTNAME_LABEL` | `$(hostname)` | Label for email subject |
+| `CONDA_ENV` | None | Conda environment name |
+| `CONDA_HOME` | Auto-detected | Conda installation path |
+| `JAVA_HOME` | None | Java installation path |
+| `HARVEST_CONFIG_FILE` | `harvest-policy-ipda.xml` | Harvest policy file |
 | `PSA_SYNC_EXCLUDES` | `nasa/pds` | Exclusion pattern for pds-sync-api |
 | `JAVA_TOOL_OPTIONS` | `-Xms2g -Xmx8g` | JVM memory options |
 
-### Email Notifications
+---
 
-Email notifications are **always sent by default** for any step combination (success or failure).
-
-This ensures you're always notified when automated jobs complete, regardless of which steps are executed.
-
-**To suppress email notifications** (e.g., during testing):
-```bash
-./psa_sync_wrapper.sh -n --download-labels
-```
-
-The email includes:
-- Which steps were executed
-- Success/failure status
-- Harvest summary (if step 2 ran)
-- Error messages
-- Log file location
-
-### Logging
-
-All output is logged to timestamped files in `$LOG_DIR`:
-- Format: `psa_sync_YYYYMMDD_HHMMSS.log`
-- Output is both displayed to console and written to log file
-- Skipped steps are logged with "(USER SKIPPED)" markers
-
-### Automation with Cron
-
-The wrapper script is designed for cron automation. You can configure it to run at scheduled intervals.
-
-#### Option 1: Using --config Flag (Recommended)
-
-```cron
-# Run daily at 2 AM
-0 2 * * * /path/to/psa_sync_wrapper.sh -c /path/to/secure/my-config.env
-```
-
-#### Option 2: Source Environment First
-
-```cron
-# Run daily at 2 AM
-0 2 * * * . /path/to/secure/my-config.env && /path/to/psa_sync_wrapper.sh
-```
-
-### Deployment Checklist
-
-#### Configuration
-- [ ] Copy and customize `psa_sync_wrapper.env.example`
-- [ ] Store configuration file in secure location (NOT in repo)
-- [ ] Set restrictive permissions: `chmod 600 my-config.env`
-- [ ] Use absolute paths for all directories in config
-- [ ] Verify all required environment variables are set
-
-#### Validation
-- [ ] **Run dry-run mode:** `./psa_sync_wrapper.sh -c my-config.env --dry-run`
-- [ ] Verify Java is available: `java -version`
-- [ ] Verify Python is available: `python --version`
-- [ ] Test email delivery: `echo "Test" | mail -s "Test" "$EMAIL_RECIPIENTS"`
-- [ ] If using conda, verify environment exists: `conda env list`
-
-#### Testing
-- [ ] **Test with single step first:** `./psa_sync_wrapper.sh -c my-config.env --download-labels`
-- [ ] Verify logs are written to `$LOG_DIR`
-- [ ] Verify email notification received
-- [ ] Run all three steps: `./psa_sync_wrapper.sh -c my-config.env`
-
-#### Production Deployment
-- [ ] Test with manual run before scheduling cron
-- [ ] Monitor first few cron runs
-- [ ] Set up log rotation if needed
-
-### Troubleshooting
-
-#### "Missing required environment variables"
-**Cause:** Required environment variables not set.
-
-**Solution:**
-- Use `-c` flag: `./psa_sync_wrapper.sh -c my-config.env`
-- Or source config: `source my-config.env && ./psa_sync_wrapper.sh`
-
-#### "Config file not found"
-**Cause:** Invalid path provided to `-c` flag.
-
-**Solution:** Verify the config file path is correct and accessible.
-
-#### Conda activation fails
-**Cause:** `CONDA_ENV` points to invalid environment.
-
-**Solution:**
-- Verify conda environment exists: `conda env list`
-- Or unset `CONDA_ENV` to skip conda activation
-
-#### Java not found
-**Cause:** Java not in PATH and `JAVA_HOME` not set.
-
-**Solution:**
-- Set `JAVA_HOME` in config file to Java installation path
-- Or ensure `java` is in your system PATH
-
-#### Step 2 validation fails (labels ≠ docs)
-**Cause:** Harvest failed to process some labels.
-
-**Solution:**
-- Check harvest logs for errors
-- Verify harvest config file is correct
-- Ensure sufficient Java heap memory (`JAVA_TOOL_OPTIONS`)
-
-### Step Execution Logic
-
-- Steps execute in ascending order (1 → 2 → 3) regardless of input order
-- Each step must succeed before the next begins
-- Step 2 includes validation: registered labels must equal created Solr docs
-- Skipped steps are logged but don't affect execution
-- Use individual steps for debugging or partial updates
-
-### Development & Maintenance
-
-#### Code Quality
-The wrapper script follows shell scripting best practices:
-- Uses `set -euo pipefail` for fail-fast behavior
-- Constants for magic numbers
-- Comprehensive input validation
-- Clear error messages
-
-#### Running Shellcheck
-Before committing changes to the wrapper script, run shellcheck:
+## Command-Line Options
 
 ```bash
-shellcheck psa_sync_wrapper.sh
+./psa_sync_wrapper.sh [OPTIONS] [STEPS]
+
+STEPS (optional, defaults to all):
+    --download-labels   Download PSA Labels (step 1)
+    --create-docs       Run Harvest (step 2)
+    --load              Load into Registry (step 3)
+
+OPTIONS:
+    -c, --config FILE   Load config from file (recommended)
+    -n, --no-email      Suppress email notification
+    -h, --help          Show help message
 ```
 
-Address all warnings and errors. The script should pass shellcheck with no issues.
-
-#### Testing Changes
-1. Test with dry-run mode: `./psa_sync_wrapper.sh -c test.env --dry-run`
-2. Test individual steps before running full pipeline
-3. Verify email notifications work as expected
-4. Test error handling by providing invalid configurations
+**Note:** Steps always execute in order (1→2→3) regardless of input order.
 
 ---
 
-## File Reference
+## Usage Examples
+
+```bash
+# Run all three steps (default)
+./psa_sync_wrapper.sh -c my-config.env
+
+# Run only download step
+./psa_sync_wrapper.sh -c my-config.env --download-labels
+
+# Run download without email (testing)
+./psa_sync_wrapper.sh -c my-config.env -n --download-labels
+
+# Run harvest and load steps
+./psa_sync_wrapper.sh -c my-config.env --create-docs --load
+
+# Source config manually (alternative to -c flag)
+. my-config.env && ./psa_sync_wrapper.sh
+```
+
+---
+
+## Validation
+
+The script validates configuration **before execution**:
+
+### Step 1 (download-labels)
+- Directories exist: EN_OPS_UTILS_HOME, PSA_SYNC_DATA_DIR
+- Python script exists: pds_sync_api.py
+- Python/conda available and configured
+
+### Step 2 (create-docs)
+- Directories exist: HARVEST_SOLR_CONF_HOME, PDS4_SOLR_DOC_HOME
+- harvest-solr executable exists
+- Harvest config file exists
+- Java available (JAVA_HOME or system)
+
+### Step 3 (load)
+- Directory exists: PDS4_SOLR_DOC_HOME
+- registry-mgr-solr executable exists
+
+### Email (if enabled)
+- EMAIL_RECIPIENTS has valid format
+- mail command available
+
+**On validation failure:** Script exits with code 1 and clear error message.
+
+---
+
+## Email Notifications
+
+Email sent by default after execution (use `-n` to suppress).
+
+### Email Contents
+- Hostname and timestamp
+- Steps executed
+- Success/failure status
+- Harvest summary (labels processed, docs created)
+- Error log excerpts (first 20 errors)
+- Log file location
+
+### Testing Email
+```bash
+# Test mail command
+echo "Test" | mail -s "Test Subject" "$EMAIL_RECIPIENTS"
+
+# Install mail utility if missing
+sudo apt-get install mailutils  # Debian/Ubuntu
+sudo yum install mailx          # CentOS/RHEL
+```
+
+---
+
+## Logging
+
+Logs written to: `$LOG_DIR/psa_sync_YYYYMMDD_HHMMSS.log`
+
+**Features:**
+- Output to both console and file (via `tee`)
+- Restrictive permissions (chmod 600)
+- Timestamped messages
+- Skipped steps marked with "(USER SKIPPED)"
+
+**Example log:**
+```
+===========================================
+=== [2025-01-15 14:23:45] Configuration Summary ===
+Log file:           /var/log/psa-sync/psa_sync_20250115_142345.log
+Hostname:           production-server
+Running 3 steps: download-labels create-docs load
+Email notification: Enabled
+===========================================
+✓ Configuration validated for steps: download-labels create-docs load
+=== [2025-01-15 14:23:46] Step 1: Downloading PSA Labels ===
+...
+```
+
+---
+
+## Automation with Cron
+
+```cron
+# Run daily at 2 AM
+0 2 * * * /path/to/psa_sync_wrapper.sh -c /path/to/prod.env
+
+# Run weekly on Monday at 3 AM
+0 3 * * 1 /path/to/psa_sync_wrapper.sh -c /path/to/prod.env
+```
+
+**Best Practices:**
+- Use absolute paths
+- Test manually before scheduling
+- Set up log rotation:
+  ```bash
+  # /etc/logrotate.d/psa-sync
+  /var/log/psa-sync/*.log {
+      daily
+      rotate 30
+      compress
+      missingok
+  }
+  ```
+
+---
+
+## Troubleshooting
+
+### Bash Version Issues
+
+**"declare: -A: invalid option"**
+
+**Cause:** Bash version too old (< 4.0)
+
+**Solution:**
+```bash
+# Check version
+bash --version
+
+# macOS: Install newer bash via Homebrew
+brew install bash
+
+# Update shebang or run explicitly
+/usr/local/bin/bash ./psa_sync_wrapper.sh -c dev.env
+```
+
+### Configuration Issues
+
+**"Missing required environment variables"**
+```bash
+# Solution: Use -c flag or source config
+./psa_sync_wrapper.sh -c my-config.env
+```
+
+**"Config file not found"**
+```bash
+# Solution: Verify path
+ls -l /path/to/config.env
+```
+
+### Python/Conda Issues
+
+**"Conda environment not found"**
+```bash
+# List environments
+conda env list
+
+# Verify name matches
+CONDA_ENV="myenv"  # Must match exactly
+```
+
+**"Python required but not found"**
+```bash
+# Check Python
+which python
+python --version
+
+# Or use conda
+CONDA_ENV="myenv"
+```
+
+### Java Issues
+
+**"Java required but not found"**
+```bash
+# Option 1: Set JAVA_HOME
+JAVA_HOME="/usr/lib/jvm/java-17-openjdk"
+
+# Option 2: Verify system Java
+which java
+java -version
+```
+
+### Harvest Issues
+
+**"Harvest validation failed (labels ≠ docs)"**
+```bash
+# Check logs for errors
+grep ERROR /var/log/psa-sync/psa_sync_*.log
+
+# Increase Java heap memory
+JAVA_TOOL_OPTIONS="-Xms4g -Xmx16g"
+```
+
+### Email Issues
+
+**"mail command not found"**
+```bash
+# Install mail utility
+sudo apt-get install mailutils  # Debian/Ubuntu
+sudo yum install mailx          # CentOS/RHEL
+
+# Or disable email
+./psa_sync_wrapper.sh -n
+```
+
+---
+
+## Deployment Checklist
+
+### Configuration
+- [ ] Copy `psa_sync_wrapper.env.example` to secure location
+- [ ] Customize all required variables
+- [ ] Use absolute paths for all directories
+- [ ] Set permissions: `chmod 600 config.env`
+
+### Validation
+- [ ] Verify Java: `java -version`
+- [ ] Verify Python: `python --version`
+- [ ] Test email: `echo "Test" | mail -s "Test" "$EMAIL_RECIPIENTS"`
+- [ ] Verify all directory paths exist
+
+### Testing
+- [ ] Test single step: `./psa_sync_wrapper.sh -c config.env --download-labels`
+- [ ] Verify logs written to `$LOG_DIR`
+- [ ] Run other steps: `./psa_sync_wrapper.sh -c config.env --create-docs --load`
+- [ ] Review log file for errors
+
+### Production
+- [ ] Test manual run before cron
+- [ ] Monitor first few cron runs
+- [ ] Set up log rotation
+
+---
+
+## Files in This Directory
 
 | File | Purpose |
 |------|---------|
-| `pds_sync_api.py` | Python module for downloading PSA labels |
-| `psa_sync_wrapper.sh` | Bash wrapper for complete sync workflow |
-| `psa_sync_wrapper.env.example` | Template configuration file |
-| `README.md` | This file |
+| `pds_sync_api.py` | Python script for downloading PSA labels |
+| `psa_sync_wrapper.sh` | Bash wrapper for complete workflow |
+| `psa_sync_wrapper.env.example` | Template for wrapper configuration |
+| `README.md` | This documentation |
+
+---
 
 ## See Also
 
-- [Main repository README](../../../../README.md) - Setup and development instructions
-- [CLAUDE.md](../../../../CLAUDE.md) - Claude Code guidance for this repository
+- [Main README](../../../../README.md) - Repository setup and development
+- [CLAUDE.md](../../../../CLAUDE.md) - Claude Code guidance
+- [Harvest and Registry](https://github.com/NASA-PDS/registry-mgr-solr) - harvest-solr and legacy-registry documentation
