@@ -41,7 +41,9 @@ Required environment variables:
 | `scripts/repos/repo-corral.py` | Bulk-updates repos in the `NASA-PDS` org (e.g., propagating template changes) |
 | `scripts/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
 | `scripts/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
-| `scripts/portal/pds-sync-api.py` | Downloads ESA PSA product XML files from the PDS search API for harvest |
+| **Portal Tools** ([detailed docs](src/pds/en_ops_utils/portal/README.md)) | |
+| `pds-sync-api` | Downloads ESA PSA product XML files from the PDS search API and generates harvest config |
+| `psa_sync_wrapper.sh` | Automated wrapper for complete PSA sync workflow: download → harvest → load into registry |
 
 ### ldd-corral.py
 
@@ -80,14 +82,22 @@ scripts/ldds/list_open_release_prs.py 1.26.0.0 --repo ldd-img --token $GITHUB_TO
 scripts/pds-stats.py --github_repos validate mi-label transform --token $GITHUB_TOKEN
 ```
 
-### pds-sync-api
+### Portal Tools (PSA Label Sync)
 
-Downloads ESA PSA product XML files from the PDS search API and generates a harvest config. Installed as a console script via `pip install -e .`:
+Tools for syncing ESA PSA labels and managing portal data ingestion. See [Portal Tools README](src/pds/en_ops_utils/portal/README.md) for detailed documentation.
+
+**Quick examples:**
 
 ```bash
-pds-sync-api --node-name psa --download-path download/
-# or run the script directly:
-scripts/portal/pds-sync-api.py --node-name psa --download-path download/
+# Download PSA labels and generate harvest config
+pds-sync-api --node-name psa --download-path /data/psa/
+
+# Automated workflow: download → harvest → load into registry
+bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env
+
+# Run only specific steps
+bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env --download-labels
+bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env --create-docs --load
 ```
 
 ### NSSDCA Status Checker
