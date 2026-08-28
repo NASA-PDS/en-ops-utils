@@ -315,9 +315,15 @@ Run normally:
 
 Create configuration files:
 ```bash
-cp psa_sync_wrapper.env.example prod.env
+cp dev.env prod.env
 cp check_and_load.env.example check_and_load.env
 chmod 600 prod.env check_and_load.env
+```
+
+Edit `prod.env` (based off `dev.env`):
+```bash
+# edit HOSTNAME_LABEL
+# edit other values if needed
 ```
 
 Edit `check_and_load.env`:
