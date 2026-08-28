@@ -16,7 +16,7 @@
 # Repository: https://github.com/NASA-PDS/en-ops-utils
 
 # Require bash 4.0+ (associative arrays)
-if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
     echo "ERROR: Bash 4.0 or higher required (current: $BASH_VERSION)" >&2
     echo "macOS users: install bash via Homebrew (brew install bash)" >&2
     exit 1
@@ -86,7 +86,7 @@ validate_command() {
 
     if ! command -v "$cmd_name" &> /dev/null; then
         echo "ERROR: $cmd_name required but not found in PATH" >&2
-        [ -n "$hint" ] && echo "$hint" >&2
+        [[ -n "$hint" ]] && echo "$hint" >&2
         return 1
     fi
     return 0
@@ -130,12 +130,12 @@ validate_step_1_resources() {
     validate_file "pds_sync_api.py" "$pds_sync_script" || validation_failed=true
 
     # Validate Python/conda availability
-    if [ -n "$CONDA_ENV" ]; then
+    if [[ -n "$CONDA_ENV" ]]; then
         validate_command "conda" "conda required for CONDA_ENV=$CONDA_ENV" || validation_failed=true
 
-        if [ "$validation_failed" = "false" ]; then
+        if [[ "$validation_failed" = "false" ]]; then
             # Cache conda env list for performance (only call once)
-            if [ -z "$CONDA_ENV_LIST_CACHE" ]; then
+            if [[ -z "$CONDA_ENV_LIST_CACHE" ]]; then
                 CONDA_ENV_LIST_CACHE=$(conda env list 2>/dev/null)
             fi
 
@@ -146,7 +146,7 @@ validate_step_1_resources() {
             else
                 # Check if conda.sh can be sourced
                 local conda_sh_path=$(_find_conda_sh)
-                if [ -z "$conda_sh_path" ]; then
+                if [[ -z "$conda_sh_path" ]]; then
                     echo "ERROR: conda.sh not found for sourcing conda environment" >&2
                     echo "Set CONDA_HOME or ensure conda.sh exists in standard locations" >&2
                     validation_failed=true
@@ -158,7 +158,7 @@ validate_step_1_resources() {
         validate_command "python" "" || validation_failed=true
     fi
 
-    [ "$validation_failed" = "true" ] && return 1
+    [[ "$validation_failed" = "true" ]] && return 1
     return 0
 }
 
@@ -178,7 +178,7 @@ validate_step_2_resources() {
     validate_file "Harvest config ($HARVEST_CONFIG_FILE)" "$harvest_config" || validation_failed=true
 
     # Validate Java availability
-    if [ -n "$JAVA_HOME" ]; then
+    if [[ -n "$JAVA_HOME" ]]; then
         # User specified JAVA_HOME, validate it points to valid JDK
         validate_executable "Java (JAVA_HOME/bin/java)" "$JAVA_HOME/bin/java" || validation_failed=true
     else
@@ -186,7 +186,7 @@ validate_step_2_resources() {
         validate_command "java" "Set JAVA_HOME or ensure java is in your PATH" || validation_failed=true
     fi
 
-    [ "$validation_failed" = "true" ] && return 1
+    [[ "$validation_failed" = "true" ]] && return 1
     return 0
 }
 
@@ -200,7 +200,7 @@ validate_step_3_resources() {
     # Validate registry-mgr-solr executable using helper
     validate_executable "registry-mgr-solr" "$REGISTRY_MGR_SOLR_HOME/bin/registry-mgr-solr" || validation_failed=true
 
-    [ "$validation_failed" = "true" ] && return 1
+    [[ "$validation_failed" = "true" ]] && return 1
     return 0
 }
 
@@ -215,14 +215,14 @@ validate_email_config() {
         validation_failed=true
     fi
 
-    # Check if mail command is available (warning only - not fatal)
+    # Check if mail command is available
     if ! command -v mail &> /dev/null; then
         echo "ERROR: mail command not found - email notifications will be skipped" >&2
         echo "Install mailutils or mailx if email notifications are needed" >&2
         validation_failed=true
     fi
 
-    [ "$validation_failed" = "true" ] && return 1
+    [[ "$validation_failed" = "true" ]] && return 1
     return 0
 }
 
@@ -231,18 +231,18 @@ _find_conda_sh() {
     local conda_sh_path=""
 
     # Priority 1: Explicit CONDA_HOME
-    if [ -n "$CONDA_HOME" ] && [ -f "$CONDA_HOME/etc/profile.d/conda.sh" ]; then
+    if [[ -n "$CONDA_HOME" ]] && [[ -f "$CONDA_HOME/etc/profile.d/conda.sh" ]]; then
         conda_sh_path="$CONDA_HOME/etc/profile.d/conda.sh"
     # Priority 2: Common installation paths
-    elif [ -f "$HOME/.conda/etc/profile.d/conda.sh" ]; then
+    elif [[ -f "$HOME/.conda/etc/profile.d/conda.sh" ]]; then
         conda_sh_path="$HOME/.conda/etc/profile.d/conda.sh"
-    elif [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
+    elif [[ -f "/opt/conda/etc/profile.d/conda.sh" ]]; then
         conda_sh_path="/opt/conda/etc/profile.d/conda.sh"
     # Priority 3: Derive from conda command location
     elif command -v conda &> /dev/null; then
         local conda_bin=$(command -v conda)
         local conda_base=$(dirname "$(dirname "$conda_bin")")
-        if [ -f "$conda_base/etc/profile.d/conda.sh" ]; then
+        if [[ -f "$conda_base/etc/profile.d/conda.sh" ]]; then
             conda_sh_path="$conda_base/etc/profile.d/conda.sh"
         fi
     fi
@@ -360,7 +360,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # If no steps specified, default to all three
-if [ ${#STEPS_TO_RUN[@]} -eq 0 ]; then
+if [[ ${#STEPS_TO_RUN[@]} -eq 0 ]]; then
     STEPS_TO_RUN[$STEP_DOWNLOAD]=1
     STEPS_TO_RUN[$STEP_HARVEST]=1
     STEPS_TO_RUN[$STEP_LOAD]=1
@@ -373,7 +373,7 @@ for step_num in $(printf '%s\n' "${!STEPS_TO_RUN[@]}" | sort -n); do
 done
 
 # Determine if email should be sent (keep it simple)
-if [ "$NO_EMAIL" = true ]; then
+if [[ "$NO_EMAIL" = true ]]; then
     SEND_EMAIL=false
 else
     SEND_EMAIL=true
@@ -400,19 +400,19 @@ if step_is_enabled "$STEP_LOAD"; then
     REQUIRED_VARS["PDS4_SOLR_DOC_HOME"]=1  # No duplicate check needed with assoc array
 fi
 
-if [ "$SEND_EMAIL" = true ]; then
+if [[ "$SEND_EMAIL" = true ]]; then
     REQUIRED_VARS["EMAIL_RECIPIENTS"]=1
 fi
 
 # Check all required variables for enabled steps
 MISSING_VARS=()
 for var in "${!REQUIRED_VARS[@]}"; do
-    if [ -z "${!var:-}" ]; then
+    if [[ -z "${!var:-}" ]]; then
         MISSING_VARS+=("$var")
     fi
 done
 
-if [ ${#MISSING_VARS[@]} -gt 0 ]; then
+if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
     echo "ERROR: Missing required environment variables for selected steps:" >&2
     for var in "${MISSING_VARS[@]}"; do
         echo "  - $var" >&2
@@ -481,7 +481,7 @@ if step_is_enabled "$STEP_LOAD"; then
 fi
 
 # Validate email config
-if [ "$SEND_EMAIL" = true ]; then
+if [[ "$SEND_EMAIL" = true ]]; then
     if ! validate_email_config; then
         echo "Validation failed for email notification. If non-critical, use `-n, --no-email` to disable this."
         exit 1
@@ -495,7 +495,7 @@ send_notification() {
     local exit_code=$?
     local status_subject="[PSA Label Sync] Ingestion Succeeded on ${HOSTNAME_LABEL} (Steps: ${STEP_NAMES[*]})"
 
-    if [ $exit_code -ne 0 ]; then
+    if [[ $exit_code -ne 0 ]]; then
         status_subject="[PSA Label Sync] FAILED on ${HOSTNAME_LABEL} (Exit Code: $exit_code, Steps: ${STEP_NAMES[*]})"
     fi
 
@@ -504,7 +504,7 @@ send_notification() {
 
 Hostname: ${HOSTNAME_LABEL}
 Steps Executed: ${STEP_NAMES[*]}
-Job Status: $( [ $exit_code -eq 0 ] && echo "SUCCESS" || echo "FAILED (Exit Code: $exit_code)" )
+Job Status: $( [[ $exit_code -eq 0 ]] && echo "SUCCESS" || echo "FAILED (Exit Code: $exit_code)" )
 Log File: $LOG_FILE
 "
 
@@ -555,7 +555,7 @@ EOF
 }
 
 # Register the trap only if email should be sent
-if [ "$SEND_EMAIL" = true ]; then
+if [[ "$SEND_EMAIL" = true ]]; then
     trap send_notification EXIT
 fi
 
@@ -566,7 +566,7 @@ start_log() {
     echo "Log file:           $LOG_FILE"
     echo "Hostname:           $HOSTNAME_LABEL"
     echo "Running ${#STEP_NAMES[@]} steps: ${STEP_NAMES[*]}"
-    if [ "$SEND_EMAIL" = true ]; then
+    if [[ "$SEND_EMAIL" = true ]]; then
         echo "Email notification: Enabled"
         echo "Email recipients:   $EMAIL_RECIPIENTS"
     else
@@ -580,10 +580,10 @@ step_1_download() {
     echo "=== [$(date)] Step 1: Downloading PSA Labels ==="
 
     # Activate conda environment if specified (already validated)
-    if [ -n "$CONDA_ENV" ]; then
+    if [[ -n "$CONDA_ENV" ]]; then
         local conda_sh_path=$(_find_conda_sh)
         # Path is guaranteed to exist by validation, but check defensively
-        if [ -n "$conda_sh_path" ]; then
+        if [[ -n "$conda_sh_path" ]]; then
             echo "Sourcing conda from: $conda_sh_path"
             source "$conda_sh_path"
             echo "Activating conda environment: $CONDA_ENV"
@@ -609,7 +609,7 @@ step_2_harvest() {
     echo "=== [$(date)] Step 2: Generating Solr Docs with Harvest ==="
 
     # Setup JAVA_HOME if specified (otherwise uses system java from PATH)
-    if [ -n "$JAVA_HOME" ]; then
+    if [[ -n "$JAVA_HOME" ]]; then
         export PATH="$JAVA_HOME/bin:$PATH"
     fi
 
@@ -638,7 +638,7 @@ step_2_harvest() {
     # Verify:
     # 1. At least one label was processed (> 0)
     # 2. Registered labels equal created Solr docs
-    if [ "$LABELS_REGISTERED" -gt 0 ] && [ "$LABELS_REGISTERED" -eq "$DOCS_CREATED" ]; then
+    if [[ "$LABELS_REGISTERED" -gt 0 ]] && [[ "$LABELS_REGISTERED" -eq "$DOCS_CREATED" ]]; then
         echo "=== [$(date)] Step 2 completed successfully ($LABELS_REGISTERED labels = $DOCS_CREATED docs) ==="
     else
         echo "=== [$(date)] ERROR: Harvest validation failed! (Registered: $LABELS_REGISTERED, Created: $DOCS_CREATED) ===" >&2
@@ -681,7 +681,7 @@ echo "=== [$(date)] All requested steps completed successfully ==="
 # --- Post-Success Actions ---
 # Multi-machine coordination: Create marker file for production to detect completion
 # See check_and_load.env.example for detailed setup instructions
-if [ -n "$SUCCESS_MARKER_FILE" ]; then
+if [[ -n "$SUCCESS_MARKER_FILE" ]]; then
     echo "Creating success marker file: $SUCCESS_MARKER_FILE"
     {
         echo "# PSA Sync Success Marker"

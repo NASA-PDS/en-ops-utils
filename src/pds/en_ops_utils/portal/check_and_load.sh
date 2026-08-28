@@ -68,12 +68,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Require config file
-if [ -z "$CONFIG_FILE" ]; then
+if [[ -z "$CONFIG_FILE" ]]; then
     echo "ERROR: Config file required. Use -c flag." >&2
     usage
 fi
 
-if [ ! -f "$CONFIG_FILE" ]; then
+if [[ ! -f "$CONFIG_FILE" ]]; then
     echo "ERROR: Config file not found: $CONFIG_FILE" >&2
     exit 1
 fi
@@ -85,12 +85,12 @@ source "$CONFIG_FILE"
 # --- Validate Required Variables ---
 MISSING_VARS=()
 for var in MARKER_FILE WRAPPER_SCRIPT WRAPPER_CONFIG; do
-    if [ -z "${!var:-}" ]; then
+    if [[ -z "${!var:-}" ]]; then
         MISSING_VARS+=("$var")
     fi
 done
 
-if [ ${#MISSING_VARS[@]} -gt 0 ]; then
+if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
     echo "ERROR: Missing required variables in config file:" >&2
     for var in "${MISSING_VARS[@]}"; do
         echo "  - $var" >&2
@@ -105,12 +105,12 @@ ERROR_EMAIL="${ERROR_EMAIL:-}"
 # --- Main Logic ---
 
 # Exit silently if no marker file exists
-if [ ! -f "$MARKER_FILE" ]; then
+if [[ ! -f "$MARKER_FILE" ]]; then
     exit 0
 fi
 
 # Check marker age (don't process stale markers)
-if [ "$(uname)" = "Linux" ]; then
+if [[ "$(uname)" = "Linux" ]]; then
     # Linux
     MARKER_MTIME=$(stat -c %Y "$MARKER_FILE" 2>/dev/null || echo 0)
 else
@@ -122,7 +122,7 @@ CURRENT_TIME=$(date +%s)
 AGE_SECONDS=$((CURRENT_TIME - MARKER_MTIME))
 AGE_HOURS=$((AGE_SECONDS / 3600))
 
-if [ "$AGE_SECONDS" -gt $((MAX_AGE_HOURS * 3600)) ]; then
+if [[ "$AGE_SECONDS" -gt $((MAX_AGE_HOURS * 3600)) ]]; then
     echo "[$(date -Iseconds)] Marker is stale (${AGE_HOURS}h old), ignoring"
     exit 0
 fi
@@ -148,7 +148,7 @@ else
     echo "[$(date -Iseconds)] ✗ Production load FAILED (exit code: $EXIT_CODE)" >&2
 
     # Optional: Send error notification
-    if [ -n "$ERROR_EMAIL" ] && command -v mail >/dev/null 2>&1; then
+    if [[ -n "$ERROR_EMAIL" ]] && command -v mail >/dev/null 2>&1; then
         echo "Production PSA sync load failed. Check logs: $(hostname)" | \
             mail -s "[PSA Sync] Production Load Failed" "$ERROR_EMAIL"
     fi
