@@ -25,10 +25,19 @@ pre-commit install
 pre-commit install --hook-type pre-push
 ```
 
-Required environment variables:
-- `GITHUB_TOKEN` — GitHub personal access token with repo access
-- `PDSEN_OPS_TOKEN` — Used by shell scripts targeting LDD repos
-- `EMAIL_PASSWORD` — For NSSDCA status email notifications (pds-operator@jpl.nasa.gov)
+### Environment Variables
+
+Set in your shell profile (`.bashrc`, `.bash_profile`, or `.zshrc`):
+
+```bash
+export GITHUB_TOKEN="your_token_here"              # GitHub personal access token with repo access
+export PDSEN_OPS_TOKEN="your_token_here"           # For shell scripts targeting LDD repos
+export EMAIL_PASSWORD="your_password"              # For NSSDCA status email notifications
+export PDS4_MANIFESTS_PATH="/path/to/manifests/"   # NSSDCA manifests directory
+export NSSDCA_DELIVERIES_PATH="/path/to/deliveries/" # NSSDCA deliveries directory
+```
+
+See individual script READMEs for script-specific requirements.
 
 ### Key Scripts
 
@@ -41,6 +50,8 @@ Required environment variables:
 | `scripts/repos/repo-corral.py` | Bulk-updates repos in the `NASA-PDS` org (e.g., propagating template changes) |
 | `scripts/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
 | `scripts/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
+| `scripts/portal/pds-sync-api.py` | Downloads ESA PSA product XML files from the PDS search API for harvest |
+| `scripts/nssdca/nssdca.py` | NSSDCA AIP/SIP delivery processing: unpacks archives, validates labels, posts to NSSDCA automator |
 | **Portal Tools** ([detailed docs](src/pds/en_ops_utils/portal/README.md)) | |
 | `pds-sync-api` | Downloads ESA PSA product XML files from the PDS search API and generates harvest config |
 | `psa_sync_wrapper.sh` | Automated wrapper for complete PSA sync workflow: download → harvest → load into registry |
@@ -100,9 +111,16 @@ bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env --download
 bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env --create-docs --load
 ```
 
-### NSSDCA Status Checker
+### NSSDCA Scripts
 
-Monitors PDS4 package status in NSSDCA, updates GitHub issues with status comments, sends failure notifications to pds-operator@jpl.nasa.gov, and closes issues when all packages are ingested. Reads/writes `nssdca_status.csv` with columns `github_issue_number`, `identifier`, `nssdca_status`.
+Process NSSDCA AIP/SIP deliveries and monitor archiving status.
+
+```bash
+# Process delivery from GitHub ticket
+python3 scripts/nssdca/nssdca.py <ticket_number> -P
+```
+
+See [scripts/nssdca/README.md](scripts/nssdca/README.md) for complete workflow, setup, and troubleshooting.
 
 ### Context Duplicate Identifier Checker
 
