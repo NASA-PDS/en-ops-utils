@@ -346,7 +346,10 @@ def chmod_sets():
 
     for label in labels:
         for label_file in glob.glob(label + '*'):
-            os.chmod(label_file, 0o664)
+            # SECURITY NOTE: Files must be world-readable (0o664) for the NSSDCA
+            # automator to process them. This is an intentional requirement of the
+            # NSSDCA delivery workflow, not a security vulnerability
+            os.chmod(label_file, 0o664) # NOSONAR
 
 
 def rsync_sets(skip_validate):

@@ -448,7 +448,10 @@ if __name__ == "__main__":
         sys.stderr.write("INFO: creating " + qqCsvNameqq + " and its label\n")
         [qqFileSizeqq,qqNumRecordsqq,qqChecksumqq,qqMaxRecLengthqq] = makeCsv(newColls[collLid], qqCsvNameqq)
         [qqTitleqq, qqCitedescqq, qqCollTypeqq] = collectionLid2titleDescType(lidParts[0:5])  # somehow this passes 5 parts
-        os.chmod(qqCsvNameqq, 0o664)
+        # SECURITY NOTE: Files must be world-readable (0o664) for the NSSDCA
+        # automator to process them. This is an intentional requirement of the
+        # NSSDCA delivery workflow, not a security vulnerability
+        os.chmod(qqCsvNameqq, 0o664)    # NOSONAR
         qqBundleLidqq = ":".join(lidParts[0:4])
         if lidParts[3] == 'context': qqBundleLidqq = 'urn:nasa:pds:context'  #for now, that bundle has all context collections
         t2 = re.sub(r'QQschemaVersionQQ', qqSchemaVersionqq, template)
