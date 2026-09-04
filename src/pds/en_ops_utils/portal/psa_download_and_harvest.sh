@@ -22,7 +22,7 @@ OPTIONS:
     -h, --help          Show this help message
 
 EOF
-    exit 1
+    exit 0
 }
 
 # --- Parse Arguments ---
@@ -62,21 +62,22 @@ for var in PSA_SYNC_DATA_DIR PSA_SYNC_CONDA_ENV PSA_DOWNLOAD_LOG_DIR PSA_SYNC_HA
     fi
 done
 
-# Define lock file path 
-LOCK_FILE="${PSA_DOWNLOAD_LOG_DIR}/psa_download.lock"
-# Check if lock file exists
-if [[ -f "$LOCK_FILE" ]]; then
-    echo "Error: Another instance of psa_download_and_harvest is already running."
-    echo "If this is incorrect, please remove the lock file: $LOCK_FILE"
-    exit 1
-fi
-# Create lock file
-touch "$LOCK_FILE"
-
-
-# Set up logging if PSA_DOWNLOAD_LOG_DIR is set
+# Make directory if it doesn't exist
 mkdir -p "$PSA_DOWNLOAD_LOG_DIR"
 chmod 700 "$PSA_DOWNLOAD_LOG_DIR"
+
+# Acquire exclusive lock using flock (prevents race conditions)
+LOCK_FILE="${PSA_DOWNLOAD_LOG_DIR}/psa_download.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "Error: Another instance of psa_download_and_harvest is already running."
+    echo "Lock file: $LOCK_FILE"
+    exit 1
+fi
+# Lock held via file descriptor 9 until process exits
+
+
+# Set up logging
 PSA_DOWNLOAD_LOG_FILE="$PSA_DOWNLOAD_LOG_DIR/psa_download_$(date +%Y%m%d_%H%M%S).log"
 touch "$PSA_DOWNLOAD_LOG_FILE"
 chmod 600 "$PSA_DOWNLOAD_LOG_FILE"
@@ -106,16 +107,15 @@ Please check logs for details."
     return $exit_code
 }
 
-# Function to clean up lock file on exit
-cleanup() {
+# Function to clean up lock file on exit (flock auto-releases when process exits)
+cleanup_download() {
     rm -f "$LOCK_FILE"
-    echo ""
-    echo "Lock file removed."
+    # Lock automatically released when fd 9 closes on exit
 }
 #Combined exit handler for download phase
 download_exit_handler() {
     send_failure_notification
-    cleanup
+    cleanup_download
 }
 
 # Set trap to catch failures during download phase
@@ -153,7 +153,7 @@ fi
 
 # Disable trap with download failure notification since it was successful
 trap - EXIT
-cleanup
+cleanup_download
 
 # Run harvest (assumes env vars set)
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running harvest-solr"

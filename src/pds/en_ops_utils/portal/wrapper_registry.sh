@@ -27,7 +27,7 @@ OPTIONS:
     -h, --help          Show this help message
 
 EOF
-    exit 1
+    exit 0
 }
 
 # --- Parse Arguments ---
