@@ -21,6 +21,7 @@ import subprocess
 # Configurable paths via environment variables
 manifests_path = os.environ.get('PDS4_MANIFESTS_PATH', '/path/to/pds4/manifests/')
 script_path = os.environ.get('NSSDCA_SCRIPTS_PATH', '/path/to/nssdca-scripts/')
+inventory_dir = 'inventory/'
 
 # Ensure trailing slash
 if not manifests_path.endswith('/'):
@@ -53,7 +54,7 @@ def compare_counts():
 
 
 def run_collection_script():
-    os.chdir(script_path + 'inventory/')
+    os.chdir(script_path + inventory_dir)
     subprocess.run(['python3', 'makeCollection.py', manifests_path])
     move_latest()
 
@@ -85,7 +86,7 @@ def move_latest():
     if files_to_move:
         print(f'aip-count.py: moving Collection_product_*v{version}* files to manifests/ and manifests/inventory/ directories')
         subprocess.run(['rsync', '-av'] + files_to_move + [manifests_path])
-        subprocess.run(['rsync', '-av'] + files_to_move + [manifests_path + 'inventory/'])
+        subprocess.run(['rsync', '-av'] + files_to_move + [manifests_path + inventory_dir])
     else:
         print(f'aip-count.py: WARNING - No v{version} files found to move')
 
@@ -109,7 +110,7 @@ def remove_previous(version):
 
 def cleanup_old_versions():
     """Keep only the 2 most recent versions in inventory directory."""
-    os.chdir(script_path + 'inventory/')
+    os.chdir(script_path + inventory_dir)
 
     # Process each collection type separately
     for base_name in ['Collection_product_aip', 'Collection_product_sip_deep_archive']:

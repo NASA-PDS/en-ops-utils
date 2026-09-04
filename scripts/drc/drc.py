@@ -27,6 +27,7 @@ Environment Variables:
 
 import argparse
 import calendar
+import functools
 import json
 import logging
 import os
@@ -109,6 +110,7 @@ class MissingDateCellError(DRCError):
 # DATA CLASS
 # ============================================================================
 
+@functools.total_ordering
 @dataclass
 class DRCExcelFile:
     """
@@ -256,6 +258,12 @@ class DRCExcelFile:
             raise ValueError(f"Invalid date format: {self.date}. Expected YYYYMMDD.")
         if self.version < 0:
             raise ValueError(f"Invalid version: {self.version}. Must be non-negative.")
+
+    def __eq__(self, other: object) -> bool:
+        """Check equality by date and version."""
+        if not isinstance(other, DRCExcelFile):
+            return NotImplemented
+        return (self.date, self.version) == (other.date, other.version)
 
     def __lt__(self, other: 'DRCExcelFile') -> bool:
         """Enable sorting by date (primary), then version (secondary)."""
@@ -721,6 +729,44 @@ def massage_link_column(cell):
     return cell.hyperlink.target
 
 
+def process_excel_cell(j, cell, data_row, row_index, excel_file):
+    """
+    Process a single cell and update data_row accordingly.
+
+    Args:
+        j: Column index (0-based)
+        cell: openpyxl Cell object
+        data_row: List to update with processed values
+        row_index: Current row number (for error messages)
+        excel_file: Excel file being processed (for error messages)
+
+    Returns:
+        True to continue processing columns, False to break
+    """
+    logger.debug('  Column %d', j)
+
+    if j == 0:  # Column A: Primary Target → data_row[7]
+        data_row[7] = massage_primary_target_column(cell.value)
+    elif j == 3:  # Column D: Release Number/Name
+        data_row[j - 1] = str(cell.value).replace('\n', ' ')
+    elif j in (5, 6):  # Columns F-G: Release dates
+        if cell.value is None:
+            raise MissingDateCellError(
+                f'Cell value is blank for DATE in row {row_index} of {excel_file.filename}. '
+                f'Column {chr(65 + j)} must contain a date.'
+            )
+        value = massage_datetime_column(cell.value) if isinstance(cell.value, datetime) else cell.value
+        data_row[j - 1] = value
+    elif j == 7:  # Column H: Link
+        data_row[j - 1] = massage_link_column(cell) if cell.value == 'Link' else cell.value
+    elif j > 7:  # Ignore columns beyond H
+        logger.debug('  Ignoring column %d (beyond expected range)', j)
+        return False
+    else:  # Columns B, C, E
+        data_row[j - 1] = cell.value
+    return True
+
+
 def read_excel_file_for(year: str, excel_file: DRCExcelFile, callback: Callable):
     """
     Parse Excel file and extract data rows, then pass to callback.
@@ -748,7 +794,6 @@ def read_excel_file_for(year: str, excel_file: DRCExcelFile, callback: Callable)
     """
     logger.debug('Reading Excel file: %s, worksheet: %s', excel_file.filename, year)
 
-    # Load workbook
     try:
         wb = load_workbook(excel_file.path)
     except FileNotFoundError:
@@ -756,7 +801,6 @@ def read_excel_file_for(year: str, excel_file: DRCExcelFile, callback: Callable)
     except Exception as e:
         raise DRCError(f'Failed to load Excel file: {e}')
 
-    # Get worksheet
     try:
         ws = wb[year]
     except KeyError:
@@ -766,49 +810,13 @@ def read_excel_file_for(year: str, excel_file: DRCExcelFile, callback: Callable)
             f'Available worksheets: {available}'
         )
 
-    # Parse rows (skip header row 1)
     data_list = []
     for i in range(2, ws.max_row + 1):
         logger.debug('Processing row %d', i)
-
         data_row = [None] * 8
-
         for j, cell in enumerate(ws[i]):
-            logger.debug('  Column %d', j)
-
-            if j == 0:  # Column A: Primary Target → data_row[7]
-                data_row[7] = massage_primary_target_column(cell.value)
-
-            elif j == 3:  # Column D: Release Number/Name (may have newlines)
-                data_row[j - 1] = str(cell.value).replace('\n', ' ')
-
-            elif j == 5 or j == 6:  # Columns F-G: Release dates
-                if cell.value is None:
-                    raise MissingDateCellError(
-                        f'Cell value is blank for DATE in row {i} of {excel_file.filename}. '
-                        f'Column {chr(65 + j)} must contain a date.'
-                    )
-
-                if isinstance(cell.value, datetime):
-                    value = massage_datetime_column(cell.value)
-                else:
-                    value = cell.value
-                data_row[j - 1] = value
-
-            elif j == 7:  # Column H: Link (extract hyperlink)
-                if cell.value == 'Link':
-                    value = massage_link_column(cell)
-                else:
-                    value = cell.value
-                data_row[j - 1] = value
-
-            elif j > 7:  # Ignore columns beyond H
-                logger.debug('  Ignoring column %d (beyond expected range)', j)
+            if not process_excel_cell(j, cell, data_row, i, excel_file):
                 break
-
-            else:  # Columns B, C, E (Mission, Instrument, Release Interval)
-                data_row[j - 1] = cell.value
-
         data_list.append(data_row)
 
     callback(year, data_list)
@@ -982,7 +990,7 @@ def main(**args):
             raise DRCError('Unrecognized combination of arguments. Use `--help` for usage information.')
 
     except DRCError as e:
-        logger.error(str(e))
+        logger.exception(str(e))
         sys.exit(1)
     except Exception as e:
         logger.exception('Unexpected error occurred')

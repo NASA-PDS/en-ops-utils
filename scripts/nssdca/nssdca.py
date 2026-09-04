@@ -131,6 +131,65 @@ def cd_ticket_dir(ticket_dir):
     print(f'Running `python3 {" ".join(sys.argv)}` with DEBUG={DEBUG}')
 
 
+def validate_and_unpack_zip(zip_file, ticket_dir, writer):
+    """Validate and unpack a single zip file."""
+    try:
+        with zipfile.ZipFile(zip_file, 'r') as zf:
+            for name in zf.namelist():
+                if name.startswith('/') or '..' in name:
+                    sys.exit(f'{indent}Exiting: Unsafe file path in archive {zip_file}: {name}')
+    except zipfile.BadZipFile:
+        sys.exit(f'{indent}Exiting: Corrupted zip file: {zip_file}')
+
+    run_command(['unzip', zip_file], check=False)
+    writer.write(f'Unpacked: {zip_file}\n')
+    if not DEBUG:
+        run_command(['rm', zip_file], check=False)
+    else:
+        backup_file(ticket_dir + '-backup', zip_file)
+
+
+def validate_and_unpack_tarball(tarball, ticket_dir, writer):
+    """Validate and unpack a single tarball."""
+    try:
+        with tarfile.open(tarball, 'r:gz') as tf:
+            for member in tf.getmembers():
+                if member.name.startswith('/') or '..' in member.name:
+                    sys.exit(f'{indent}Exiting: Unsafe file path in archive {tarball}: {member.name}')
+    except tarfile.TarError:
+        sys.exit(f'{indent}Exiting: Corrupted tarball: {tarball}')
+
+    run_command(['tar', '-xzvf', tarball], check=False)
+    writer.write(f'Unpacked: {tarball}\n')
+    if not DEBUG:
+        run_command(['rm', tarball], check=False)
+    else:
+        backup_file(ticket_dir + '-backup', tarball)
+
+
+def move_nested_directory_contents(dirname):
+    """Move contents of nested directory to current directory."""
+    if dirname == 'output':
+        return
+    dir_path = Path(dirname)
+    for item in dir_path.iterdir():
+        shutil.move(str(item), '.')
+    dir_path.rmdir()
+
+
+def check_for_nested_archives(ticket_dir):
+    """Check for and recursively unpack nested archives."""
+    for (dirpath, dirnames, filenames) in os.walk('.'):
+        if len(dirnames) > 1:
+            for dirname in dirnames:
+                move_nested_directory_contents(dirname)
+        for filename in filenames:
+            if filename.endswith('.zip') or filename.endswith('.gz'):
+                unpack_sets(ticket_dir)
+                return
+        break
+
+
 def unpack_sets(ticket_dir):
     """
     Unpack archive files with security checks.
@@ -158,59 +217,11 @@ def unpack_sets(ticket_dir):
         run_command(['mkdir', '-p', 'output'], check=False)
         run_command(['rm', '-f', 'output/unpacked.txt'], check=False)
         with open('output/unpacked.txt', 'w') as writer:
-            if len(zips) != 0:
-                for zip_file in zips:
-                    # Security check: validate archive contents before unpacking
-                    try:
-                        with zipfile.ZipFile(zip_file, 'r') as zf:
-                            for name in zf.namelist():
-                                if name.startswith('/') or '..' in name:
-                                    sys.exit(f'{indent}Exiting: Unsafe file path in archive {zip_file}: {name}')
-                    except zipfile.BadZipFile:
-                        sys.exit(f'{indent}Exiting: Corrupted zip file: {zip_file}')
-
-                    run_command(['unzip', zip_file], check=False)
-                    writer.write(f'Unpacked: {zip_file}\n')
-                    if not DEBUG:
-                        run_command(['rm', zip_file], check=False)
-                    else:
-                        backup_file(ticket_dir + '-backup', zip_file)
-
-            if len(tarballs) != 0:
-                for tarball in tarballs:
-                    # Security check: validate tarball contents before unpacking
-                    try:
-                        with tarfile.open(tarball, 'r:gz') as tf:
-                            for member in tf.getmembers():
-                                if member.name.startswith('/') or '..' in member.name:
-                                    sys.exit(f'{indent}Exiting: Unsafe file path in archive {tarball}: {member.name}')
-                    except tarfile.TarError:
-                        sys.exit(f'{indent}Exiting: Corrupted tarball: {tarball}')
-
-                    run_command(['tar', '-xzvf', tarball], check=False)
-                    writer.write(f'Unpacked: {tarball}\n')
-                    if not DEBUG:
-                        run_command(['rm', tarball], check=False)
-                    else:
-                        backup_file(ticket_dir + '-backup', tarball)
-
-            for (dirpath, dirnames, filenames) in os.walk('.'):
-                # should be just the temporary 'output' directory and files in multiples of 5
-                # if there is more than 1 directory, assume set files are housed in other folders
-                # there could also be more compressed files, regardless of quantity
-                if len(dirnames) > 1:
-                    for dirname in dirnames:
-                        if dirname != 'output':
-                            # SECURITY FIX: Use shutil.move instead of os.system
-                            dir_path = Path(dirname)
-                            for item in dir_path.iterdir():
-                                shutil.move(str(item), '.')
-                            dir_path.rmdir()
-                for filename in filenames:
-                    if filename.endswith('.zip') or filename.endswith('.gz'):
-                        unpack_sets(ticket_dir)
-                        break
-                break
+            for zip_file in zips:
+                validate_and_unpack_zip(zip_file, ticket_dir, writer)
+            for tarball in tarballs:
+                validate_and_unpack_tarball(tarball, ticket_dir, writer)
+            check_for_nested_archives(ticket_dir)
         if DEBUG:
             print(indent, f'DEBUG:unpack_files(): keeping compressed file(s) in backup directory `{ticket_dir}-backup`')
 
@@ -270,6 +281,23 @@ def validate_sets():
             print(indent, indent, valid_label)
 
 
+def extract_lid_from_sip(sip_file):
+    """Extract logical identifier from a single SIP XML file."""
+    try:
+        tree = ET.parse(sip_file)
+        root = tree.getroot()
+        for elem in root.iter():
+            if elem.tag == 'logical_identifier' or elem.tag.endswith('}logical_identifier'):
+                if elem.text:
+                    return elem.text.strip()
+        print(indent, f'WARNING: No logical_identifier found in {sip_file}')
+    except ET.ParseError as e:
+        print(indent, f'WARNING: Could not parse {sip_file}: {e}')
+    except Exception as e:
+        print(indent, f'WARNING: Error processing {sip_file}: {e}')
+    return None
+
+
 def grep_lid():
     """Extract logical identifiers from SIP XML files using XML parsing."""
     print_section_text('Get logical identifiers (LIDs)')
@@ -280,26 +308,9 @@ def grep_lid():
             print(indent, f'WARNING: No SIP file found for label {label}')
             continue
 
-        try:
-            tree = ET.parse(sip_files[0])
-            root = tree.getroot()
-            # Find logical_identifier element (handles both namespaced and non-namespaced tags)
-            lid_elem = None
-            for elem in root.iter():
-                if elem.tag == 'logical_identifier' or elem.tag.endswith('}logical_identifier'):
-                    lid_elem = elem
-                    break
-
-            if lid_elem is not None and lid_elem.text:
-                lid = lid_elem.text.strip()
-                if lid and lid not in lids:
-                    lids.append(lid)
-            else:
-                print(indent, f'WARNING: No logical_identifier found in {sip_files[0]}')
-        except ET.ParseError as e:
-            print(indent, f'WARNING: Could not parse {sip_files[0]}: {e}')
-        except Exception as e:
-            print(indent, f'WARNING: Error processing {sip_files[0]}: {e}')
+        lid = extract_lid_from_sip(sip_files[0])
+        if lid and lid not in lids:
+            lids.append(lid)
 
     lids.sort()
 
@@ -352,6 +363,23 @@ def chmod_sets():
             os.chmod(label_file, 0o664) # NOSONAR
 
 
+def build_rsync_command():
+    """Build rsync command with appropriate flags."""
+    base_flags = ['-av'] if DEBUG else ['-aq']
+    return ['rsync'] + base_flags + ['--remove-source-files',
+            '--exclude=*.zip', '--exclude=*.gz', '--exclude=*.tar.gz']
+
+
+def post_label_to_manifest(label, labels_and_years, rsync_command):
+    """Post a single label to the appropriate manifest directory."""
+    for lay in labels_and_years:
+        if label == lay[0]:
+            target_path = manifests_path if lay[1] == '-' else manifests_path + lay[1] + '/'
+            run_command(rsync_command + glob.glob(label + '_*') + [target_path], check=False)
+            rsynced.append(lay)
+            break
+
+
 def rsync_sets(skip_validate):
     """Post validated AIP/SIP sets to NSSDCA manifests directory."""
     print_section_text('Post sets to appropriate `manifests` directory', '')
@@ -369,58 +397,61 @@ def rsync_sets(skip_validate):
         print(indent, no_labels_comment)
         return
 
-    # Safety check: ensure labels_and_years was populated
     if len(labels_and_years) == 0:
         print(indent, 'ERROR: Manifest year data not available. Cannot post.')
         sys.exit(1)
 
-    # BUGFIX: Use --exclude=pattern format to avoid orphaned --exclude flags
-    if DEBUG:
-        rsync_command = ['rsync', '-av', '--remove-source-files',
-                        '--exclude=*.zip', '--exclude=*.gz', '--exclude=*.tar.gz']
-    else:
-        rsync_command = ['rsync', '-aq', '--remove-source-files',
-                        '--exclude=*.zip', '--exclude=*.gz', '--exclude=*.tar.gz']
-
+    rsync_command = build_rsync_command()
     for ltp in labels_to_post:
-        for lay in labels_and_years:
-            if ltp == lay[0]:
-                if lay[1] == '-':
-                    run_command(rsync_command + glob.glob(ltp + '_*') + [manifests_path], check=False)
-                else:
-                    run_command(rsync_command + glob.glob(ltp + '_*') + [manifests_path + lay[1] + '/'], check=False)
-                rsynced.append(lay)
+        post_label_to_manifest(ltp, labels_and_years, rsync_command)
+
+
+def process_unpacked_line(line, current_zip, lwy, zip_set):
+    """Process a single line from unpacked.txt."""
+    idx_zip = len('Archive:  ')
+    idx_label = len('  inflating: ')
+
+    if line.startswith('Archive'):
+        return line[idx_zip:].strip(), False
+
+    if 'aip' in line:
+        temp_label = line[idx_label:line.index('_aip')]
+        if lwy == temp_label:
+            if current_zip in zip_set:
+                zip_set[current_zip].append(temp_label)
+            else:
+                zip_set[current_zip] = [temp_label]
+            return current_zip, True
+
+    return current_zip, False
+
+
+def parse_unpacked_txt(reader, labels_without_years):
+    """Parse unpacked.txt to map labels to their source zip files."""
+    zip_set, current_zip = {}, ''
+
+    for lwy in labels_without_years:
+        for line in reader:
+            current_zip, found = process_unpacked_line(line, current_zip, lwy, zip_set)
+            if found:
                 break
+    return zip_set
 
 
 def get_zip_of_sets(ticket_dir):
-    if os.path.isfile(nssdca_path + ticket_dir + '/output/unpacked.txt'):
-        with open(nssdca_path + ticket_dir + '/output/unpacked.txt', 'r') as reader:
-            idx_zip = len('Archive:  ')
-            idx_label = len('  inflating: ')
-            zip_set, zip = {}, ''
-            for lwy in labels_without_years:
-                for line in reader:
-                    if line.startswith('Archive'):
-                        zip = line[idx_zip:].strip()
-                    else:
-                        if 'aip' in line:
-                            temp_label = line[idx_label:line.index('_aip')]
-                            if lwy == temp_label:
-                                if zip in zip_set:
-                                    zip_set[zip].append(temp_label)
-                                else:
-                                    zip_set[zip] = [temp_label]
-                                    break
-
-        if DEBUG:
-            print(indent, 'DEBUG:get_zip_of_sets(): ')
-            for k, v in zip_set.items():
-                print(k, v)
-
-        return zip_set
-    else:
+    unpacked_file = nssdca_path + ticket_dir + '/output/unpacked.txt'
+    if not os.path.isfile(unpacked_file):
         return False
+
+    with open(unpacked_file, 'r') as reader:
+        zip_set = parse_unpacked_txt(reader, labels_without_years)
+
+    if DEBUG:
+        print(indent, 'DEBUG:get_zip_of_sets(): ')
+        for k, v in zip_set.items():
+            print(k, v)
+
+    return zip_set
 
 
 def cleanup(args):
@@ -443,6 +474,58 @@ def cleanup(args):
     summarize(zip_set, args)
 
 
+def print_manifest_url_summary(zip_set):
+    """Print summary of manifest URL year extraction."""
+    if len(labels_without_years) == 0:
+        print(indent, '# All manifest URLs included a year.')
+        return
+
+    print(indent, '# Labels missing a year from its manifest URL:')
+    if zip_set is False:
+        for lwy in labels_without_years:
+            print(indent, indent, '- ' + lwy)
+    elif type(zip_set) is dict:
+        for key, value in zip_set.items():
+            print(indent, indent, '- ' + key + ':')
+            for v in value:
+                print(indent, indent, '--- ' + v)
+
+
+def print_lid_summary():
+    """Print summary of logical identifiers."""
+    print(indent, '# Logical identifiers (LIDs):')
+    for lid in lids:
+        print(indent, indent, '- ' + lid)
+
+
+def print_validate_summary():
+    """Print summary of validation results."""
+    if full_run:
+        if len(valid_labels) == len(labels):
+            print(indent, '# No validate errors.')
+        else:
+            print(indent, '# Labels with validate errors:')
+            invalid_labels = [lbl for lbl in labels if lbl not in valid_labels]
+            for invalid_label in invalid_labels:
+                print(indent, indent, '- ' + invalid_label)
+    else:
+        print(indent, '# Validate reports not grepped for errors and left for perusal in `<ticket-dir>/output/validate-reports`')
+
+
+def print_post_summary():
+    """Print summary of posted sets."""
+    if len(rsynced) == 0:
+        print(indent, '# No sets were posted for the NSSDCA automator')
+    else:
+        print(indent, '# ' + str(len(rsynced)) + ' of ' + str(len(labels)) + ' posted for the NSSDCA automator:')
+        for r in rsynced:
+            print(indent, indent, '- ' + r[1] + ': ' + r[0])
+        print(indent, '# if applicable, c/p the following as a comment in the issue:')
+        print('-' * 50)
+        print_github_comment_to_notify_submitter()
+        print('-' * 50)
+
+
 def summarize(zip_set, args):
     print_section_text('SUMMARY')
 
@@ -453,47 +536,16 @@ def summarize(zip_set, args):
         print('\t\t\t}')
 
     if args['manifest_url']:
-        if len(labels_without_years) == 0:
-            print(indent, '# All manifest URLs included a year.')
-        else:
-            print(indent, '# Labels missing a year from its manifest URL:')
-            if zip_set is False:
-                for lwy in labels_without_years:
-                    print(indent, indent, '- ' + lwy)
-            elif type(zip_set) is dict:
-                for key, value in zip_set.items():
-                    print(indent, indent, '- ' + key + ':')
-                    for v in value:
-                        print(indent, indent, '--- ' + v)
+        print_manifest_url_summary(zip_set)
 
     if args['lid'] and not args['Post']:
-        print(indent, '# Logical identifiers (LIDs):')
-        for lid in lids:
-            print(indent, indent, '- ' + lid)
+        print_lid_summary()
 
     if args['validate']:
-        if full_run:
-            if len(valid_labels) == len(labels):
-                print(indent, '# No validate errors.')
-            else:
-                print(indent, '# Labels with validate errors:')
-                invalid_labels = [lbl for lbl in labels if lbl not in valid_labels]
-                for invalid_label in invalid_labels:
-                    print(indent, indent, '- ' + invalid_label)
-        else:
-            print(indent, '# Validate reports not grepped for errors and left for perusal in `<ticket-dir>/output/validate-reports`')
+        print_validate_summary()
 
     if args['Post']:
-        if len(rsynced) == 0:
-            print(indent, '# No sets were posted for the NSSDCA automator')
-        else:
-            print(indent, '# ' + str(len(rsynced)) + ' of ' + str(len(labels)) + ' posted for the NSSDCA automator:')
-            for r in rsynced:
-                print(indent, indent, '- ' + r[1] + ': ' + r[0])
-            print(indent, '# if applicable, c/p the following as a comment in the issue:')
-            print('-' * 50)
-            print_github_comment_to_notify_submitter()
-            print('-' * 50)
+        print_post_summary()
 
     print()
 
@@ -522,16 +574,29 @@ def print_github_comment_to_notify_submitter():
         print('- ' + rl)
 
 
-def main(**args):
-    global full_run
-    for k, v in args.items():
-        if k != 'Debug' and k != 'force':
-            if v is True:
-                full_run = False
-                break
+def configure_full_run_args(args):
+    """Configure args dictionary for full run or post mode."""
+    args['manifest_url'] = True
+    args['validate'] = not (args['Post'] and args['force'])
+    args['lid'] = True
+    args['date'] = True
+    args['permissions'] = True
+    args['Post'] = True
 
-    global DEBUG
+
+def determine_full_run(args):
+    """Determine if this is a full run based on args."""
+    for k, v in args.items():
+        if k != 'Debug' and k != 'force' and v is True:
+            return False
+    return True
+
+
+def main(**args):
+    global full_run, DEBUG
+    full_run = determine_full_run(args)
     DEBUG = args['Debug']
+
     if DEBUG:
         print(indent, 'DEBUG:main(): executing full run? ' + str(full_run))
         print(indent, 'DEBUG:main(): args are')
@@ -539,15 +604,7 @@ def main(**args):
             print(indent, indent, k + ': ' + str(v))
 
     if full_run or args['Post']:
-        args['manifest_url'] = True
-        if args['Post'] and args['force']:
-            args['validate'] = False
-        else:
-            args['validate'] = True
-        args['lid'] = True
-        args['date'] = True
-        args['permissions'] = True
-        args['Post'] = True
+        configure_full_run_args(args)
 
     ticket_directory = str(args['directory'])
     cd_ticket_dir(ticket_directory)

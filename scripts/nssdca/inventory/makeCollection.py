@@ -267,8 +267,8 @@ def collectionLid2titleDescType(lidParts):
     first5partsOfLid = ":".join(lidParts)
     if first5partsOfLid in cLid2titleDescType: return cLid2titleDescType[first5partsOfLid]
     sys.stderr.write("INFO: new collection " +first5partsOfLid+ "? Add to cLid2titleDescType{} for better <title>, <description>, and/or <collection_type>)\n")
-    partBundle = re.sub(r'_', ' ', lidParts[3]).title()  # replace _ with space
-    partColl   = re.sub(r'_', ' ', lidParts[4]).title()  #   and use title case
+    partBundle = lidParts[3].replace('_', ' ').title()  # replace _ with space
+    partColl   = lidParts[4].replace('_', ' ').title()  #   and use title case
     defaultTitle = "collection " +partColl+ " in bundle " +partBundle
     if lidParts[1] != 'nasa':
         defaultTitle = defaultTitle + ' for ' + lidParts[1].upper() + '/' + lidParts[2].upper()
@@ -337,7 +337,7 @@ def getModHistory(viddirdoc, newlidvids):
             </Modification_Detail>
 '''
     if viddirdoc is None:
-        ret = re.sub(r'QQdescQQ', "Initial version", ret)
+        ret = ret.replace('QQdescQQ', "Initial version")
         return ["1.0", ret]	# QQdateQQ,QQvidQQ get replaced later
     #else:  #NOTE Modification_History may be blank, so initially use vid
     [vid, dir, doc] = viddirdoc
@@ -352,7 +352,7 @@ def getModHistory(viddirdoc, newlidvids):
     desc = ""
     if (len(added) > 0): desc += "\nadded:\n  " + "\n  ".join(added)
     if (len(dropped) > 0): desc += "\ndropped:\n  " + "\n  ".join(dropped)
-    ret = re.sub(r'QQdescQQ', desc, ret)
+    ret = ret.replace('QQdescQQ', desc)
     moddetails = doc.findall(xpathMod)
     if not moddetails: modvid = vid
     else:
@@ -454,23 +454,23 @@ if __name__ == "__main__":
         os.chmod(qqCsvNameqq, 0o664)    # NOSONAR
         qqBundleLidqq = ":".join(lidParts[0:4])
         if lidParts[3] == 'context': qqBundleLidqq = 'urn:nasa:pds:context'  #for now, that bundle has all context collections
-        t2 = re.sub(r'QQschemaVersionQQ', qqSchemaVersionqq, template)
-        t2 = re.sub(r'QQimVersionQQ',     qqIMVersionqq,     t2)
-        t2 = re.sub(r'QQyearQQ',          qqYearqq,          t2)
-        t2 = re.sub(r'QQdateTimeQQ',      qqDateTimeqq,      t2)
-        t2 = re.sub(r'QQmodDetailsQQ',    qqModDetailsqq,    t2) #has QQdateQQ
-        t2 = re.sub(r'QQdateQQ',          qqDateqq,          t2)
-        t2 = re.sub(r'QQlidQQ',           collLid,           t2)
-        t2 = re.sub(r'QQvidQQ',           qqVidqq,           t2)
-        t2 = re.sub(r'QQbundleLidQQ',     qqBundleLidqq,     t2)
-        t2 = re.sub(r'QQtitleQQ',         qqTitleqq,         t2)
-        t2 = re.sub(r'QQcitedescQQ',      qqCitedescqq,      t2)
-        t2 = re.sub(r'QQcollTypeQQ',      qqCollTypeqq,      t2)
-        t2 = re.sub(r'QQcsvnameQQ',       qqCsvNameqq,       t2)
-        t2 = re.sub(r'QQfilesizeQQ',      qqFileSizeqq,      t2)
-        t2 = re.sub(r'QQnumRecordsQQ',    qqNumRecordsqq,    t2)
-        t2 = re.sub(r'QQchecksumQQ',      qqChecksumqq,      t2)
-        t2 = re.sub(r'QQmaxRecLengthQQ',  qqMaxRecLengthqq,  t2)
+        t2 = template.replace('QQschemaVersionQQ', qqSchemaVersionqq)
+        t2 = t2.replace('QQimVersionQQ',     qqIMVersionqq)
+        t2 = t2.replace('QQyearQQ',          qqYearqq)
+        t2 = t2.replace('QQdateTimeQQ',      qqDateTimeqq)
+        t2 = t2.replace('QQmodDetailsQQ',    qqModDetailsqq) #has QQdateQQ
+        t2 = t2.replace('QQdateQQ',          qqDateqq)
+        t2 = t2.replace('QQlidQQ',           collLid)
+        t2 = t2.replace('QQvidQQ',           qqVidqq)
+        t2 = t2.replace('QQbundleLidQQ',     qqBundleLidqq)
+        t2 = t2.replace('QQtitleQQ',         qqTitleqq)
+        t2 = t2.replace('QQcitedescQQ',      qqCitedescqq)
+        t2 = t2.replace('QQcollTypeQQ',      qqCollTypeqq)
+        t2 = t2.replace('QQcsvnameQQ',       qqCsvNameqq)
+        t2 = t2.replace('QQfilesizeQQ',      qqFileSizeqq)
+        t2 = t2.replace('QQnumRecordsQQ',    qqNumRecordsqq)
+        t2 = t2.replace('QQchecksumQQ',      qqChecksumqq)
+        t2 = t2.replace('QQmaxRecLengthQQ',  qqMaxRecLengthqq)
         t2 = re.sub(r'>\s*<', '><', t2)	# drop spaces between elements for prettify
         t3 = xml.dom.minidom.parseString(t2)	# prettify xml output
         f = open(filenameRoot + ".xml", "w+")
