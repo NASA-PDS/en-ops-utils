@@ -94,3 +94,7 @@ doi_temp.db
 tests/aaDOI_production_submitted_labels.zip
 tests/aaDOI_production_submitted_labels/
 scripts/nssdca/aip-count.txt
+
+# Config files (portal tools)
+src/pds/en_ops_utils/portal/*.env
+!src/pds/en_ops_utils/portal/*.env.example
