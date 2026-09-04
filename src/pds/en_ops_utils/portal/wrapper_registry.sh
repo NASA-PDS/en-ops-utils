@@ -116,27 +116,27 @@ echo "[$(date -Iseconds)] Starting registry load"
 # 3. Run registry-mgr-solr
 SOLR_DOCS_DIR="${PDS4_SOLR_DOC_HOME}/solr-docs"
 if [ ! -d "$SOLR_DOCS_DIR" ]; then
-    echo "[$(date -Iseconds)] ERROR: Solr docs directory not found: $SOLR_DOCS_DIR" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE" >&2
+    echo "[$(date -Iseconds)] ERROR: Solr docs directory not found: $SOLR_DOCS_DIR" >&2
     send_notification 1 "$REGISTRY_MGR_SOLR_LOG_FILE"
     exit 1
 fi
 
-echo "[$(date -Iseconds)] Running registry-mgr-solr on $SOLR_DOCS_DIR" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+echo "[$(date -Iseconds)] Running registry-mgr-solr on $SOLR_DOCS_DIR"
 set +e
 "${REGISTRY_MGR_SOLR_HOME}/bin/registry-mgr-solr" "$SOLR_DOCS_DIR" >> "$REGISTRY_MGR_SOLR_LOG_FILE" 2>&1
 REGISTRY_MGR_SOLR_EXIT=$?
 set -e
 
 if [[ $REGISTRY_MGR_SOLR_EXIT -ne 0 ]]; then
-    echo "[$(date -Iseconds)] ERROR: registry-mgr-solr failed with exit code $REGISTRY_MGR_SOLR_EXIT" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE" >&2
+    echo "[$(date -Iseconds)] ERROR: registry-mgr-solr failed with exit code $REGISTRY_MGR_SOLR_EXIT" >&2
     send_notification $REGISTRY_MGR_SOLR_EXIT "$REGISTRY_MGR_SOLR_LOG_FILE"
     exit $REGISTRY_MGR_SOLR_EXIT
 fi
 
-echo "[$(date -Iseconds)] Registry load completed successfully" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+echo "[$(date -Iseconds)] Registry load completed successfully" 
 
 # 4. Create registry marker
-echo "[$(date -Iseconds)] Creating registry success marker: $REGISTRY_MGR_SOLR_MARKER_FILE" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+echo "[$(date -Iseconds)] Creating registry success marker: $REGISTRY_MGR_SOLR_MARKER_FILE" 
 {
     echo "# Registry Success Marker"
     echo "# This file signals that registry loaded docs successfully on this machine."
@@ -146,7 +146,7 @@ echo "[$(date -Iseconds)] Creating registry success marker: $REGISTRY_MGR_SOLR_M
     echo "log_file=$REGISTRY_MGR_SOLR_LOG_FILE"
 } > "$REGISTRY_MGR_SOLR_MARKER_FILE"
 chmod 600 "$REGISTRY_MGR_SOLR_MARKER_FILE"
-echo "[$(date -Iseconds)] ✓ Registry marker created" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+echo "[$(date -Iseconds)] ✓ Registry marker created" 
 
 # 5. Send success email
 send_notification 0 "$REGISTRY_MGR_SOLR_LOG_FILE"
@@ -154,29 +154,29 @@ send_notification 0 "$REGISTRY_MGR_SOLR_LOG_FILE"
 # 6. Possible cleanup - are both registry markers present?
 REGISTRY_MARKER_COUNT=$(ls "${LEGACY_REGISTRY_MARKER_DIR}"/.registry_mgr_success_* 2>/dev/null | wc -l | tr -d ' ')
 
-echo "[$(date -Iseconds)] Checking for cleanup: found $REGISTRY_MARKER_COUNT registry marker(s)" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+echo "[$(date -Iseconds)] Checking for cleanup: found $REGISTRY_MARKER_COUNT registry marker(s)" 
 
 if [[ "$REGISTRY_MARKER_COUNT" -eq 2 ]]; then
-    echo "[$(date -Iseconds)] All machines complete - cleaning up markers" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+    echo "[$(date -Iseconds)] All machines complete - cleaning up markers" 
 
     # Remove harvest marker
     if [[ -f "$HARVEST_SOLR_MARKER_FILE" ]]; then
         rm -f "$HARVEST_SOLR_MARKER_FILE"
-        echo "[$(date -Iseconds)] ✓ Removed harvest marker: $HARVEST_SOLR_MARKER_FILE" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+        echo "[$(date -Iseconds)] ✓ Removed harvest marker: $HARVEST_SOLR_MARKER_FILE" 
     fi
 
     # Remove all registry markers
     for marker in "${LEGACY_REGISTRY_MARKER_DIR}"/.registry_mgr_success_*; do
         if [[ -f "$marker" ]]; then
             rm -f "$marker"
-            echo "[$(date -Iseconds)] ✓ Removed registry marker: $marker" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+            echo "[$(date -Iseconds)] ✓ Removed registry marker: $marker" 
         fi
     done
 
-    echo "[$(date -Iseconds)] ✓ Cleanup complete" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+    echo "[$(date -Iseconds)] ✓ Cleanup complete" 
 else
-    echo "[$(date -Iseconds)] Waiting for other machine to complete - this marker remains" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+    echo "[$(date -Iseconds)] Waiting for other machine to complete - this marker remains" 
 fi
 
-echo "[$(date -Iseconds)] Done" | tee -a "$REGISTRY_MGR_SOLR_LOG_FILE"
+echo "[$(date -Iseconds)] Done" 
 exit 0
