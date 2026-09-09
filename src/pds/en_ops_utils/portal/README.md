@@ -1,488 +1,423 @@
-# Portal Tools
+# Portal Tools - PSA Label Sync Pipeline
 
-Tools for syncing PSA (Planetary Science Archive) labels and managing portal data ingestion.
+Automated pipeline for syncing ESA Planetary Science Archive (PSA) labels into the PDS Registry.
 
-## Tools
+## Overview
 
-### pds-sync-api
+Three-step workflow for weekly ingestion of PSA product labels:
 
-Downloads ESA PSA product XML files from the PDS Search API.
+1. **Download** - Fetch PSA labels via PDS Search API (`pds-sync-api`)
+2. **Harvest** - Generate Solr documents from labels (`harvest-solr`)
+3. **Load** - Ingest documents into Registry (`registry-mgr-solr`)
+
+**Key Design:**
+- Steps 1+2 run weekly on one machine via cron
+- Step 3 runs hourly on multiple machines via cron (multi-machine coordination)
+- Marker files coordinate execution across steps and machines
+- Email notifications sent at each step
+- Lock files prevent concurrent execution
+
+Note: Step 3 (ingest documents into Registry with `wrapper_registry.sh`) happens automatically for every Harvest Solr job, even if not initiated by steps 1+2 (download and harvest with `psa_download_and_harvest.sh`).
+
+## Scripts
+
+### `pds_sync_api.py`
+
+Downloads PSA product XML labels from PDS Search API.
 
 **Installation:**
 ```bash
-pip install -e .  # From repository root
+pip install --editable .  # Installs as 'pds-sync-api' command
 ```
 
 **Usage:**
 ```bash
-pds-sync-api --download-path /path/to/labels/
+pds-sync-api -p /data/psa/labels -e nasa/pds
 ```
 
 **Options:**
-```
--p, --download-path PATH    Path to download XML files (required)
--n, --node-name NAME        Node name to query (default: psa)
--c, --config FILE           Harvest config output path (default: harvest.cfg)
--e, --exclude-patterns STR  Exclusion patterns (e.g., nasa/pds)
--f, --force                 Force re-download (skip cached files)
--v, --verbose               Enable debug logging
-```
+- `-p, --download-path` - Directory to download labels (required)
+- `-e, --exclude-patterns` - Space-separated patterns to exclude (e.g., "nasa/pds esa/psa")
+
+**Conda environment required** - see configuration section.
 
 ---
 
-## psa_sync_wrapper.sh
+### `psa_download_and_harvest.sh`
 
-Wrapper script that automates the complete PSA label sync workflow.
+Orchestrates steps 1+2: Downloads labels then runs Harvest to create Solr documents.
 
-**Requirements:** Bash 4.0+ (for associative arrays)
-
-### What It Does
-
-Orchestrates three steps with validation, logging, and notifications:
-
-1. **Download** - Uses `pds-sync-api` to download PSA labels from PDS Search API
-2. **Harvest** - Generates Solr documents from labels using harvest-solr
-3. **Load** - Loads Solr documents into registry using registry-mgr-solr
-
-### Features
-
-- Fail-fast validation before execution
-- Run all steps or select individual steps
-- Timestamped logs (console + file)
-- Email notifications with harvest summary
-- Success markers for multi-machine workflows
-- Optimized for automation (cron-ready)
-
----
-
-## Quick Start
-
-### 1. Create Configuration File
-
+**Usage:**
 ```bash
-# Copy template (can use local name)
-cp psa_sync_wrapper.env.example dev.env
-
-# Edit with your paths
-nano dev.env
-
-# Secure it
-chmod 600 dev.env
+./psa_download_and_harvest.sh -c psa_download.env
 ```
 
-**Security:**
-- `.env` files are protected by `.gitignore` - safe to store locally
-- Always set restrictive permissions: `chmod 600 *.env`
+**Options:**
+- `-c, --config FILE` - Load environment variables from config file (required)
+- `-h, --help` - Show help message
 
-### 2. Run the Script
+**Behavior:**
+- Activates conda environment and runs `pds-sync-api`
+- On download success: sends email, runs `harvest-solr` to generate Solr docs
+- On download failure: sends failure email, harvest doesn't run
+- Harvest creates marker file on success (signals step 3 to run)
+- Lock file prevents concurrent runs
+- All output logged to timestamped file in `PSA_DOWNLOAD_LOG_DIR`
 
-```bash
-# Run all three steps
-./psa_sync_wrapper.sh -c my-config.env
-
-# Run only specific steps
-./psa_sync_wrapper.sh -c my-config.env --download-labels
-./psa_sync_wrapper.sh -c my-config.env --create-docs --load
+**Cron setup (weekly):**
+```cron
+@weekly . ~/.bash_profile && cd /path/to/portal/ && ./psa_download_and_harvest.sh -c psa_download.env
 ```
 
 ---
+
+### `wrapper_registry.sh`
+
+Loads Solr documents into Registry with multi-machine coordination.
+
+**Usage:**
+```bash
+./wrapper_registry.sh
+```
+
+**Options:**
+- `-h, --help` - Show help message
+
+**Behavior:**
+- Checks for Harvest success marker file
+- If marker exists and this machine hasn't processed it yet, runs `registry-mgr-solr`
+- Creates machine-specific success marker
+- When both machines complete, cleans up all markers
+- Sends email notification on completion
+- Silent exit if no work to do (cron-friendly)
+
+**Cron setup (hourly on both dev and prod machines):**
+```cron
+@hourly . ~/.bash_profile && /path/to/portal/wrapper_registry.sh
+```
+
+**Multi-machine coordination:**
+1. Harvest (step 2) creates harvest marker: `.harvest_success`
+2. Each machine runs hourly, checks for harvest marker
+3. Machine processes work, creates machine-specific marker: `.registry_mgr_success_<hostname>`
+4. When both machines have markers (count=2), last machine cleans up all markers
+5. Cycle repeats on next harvest success
 
 ## Configuration
 
-### Required Variables
+### Required Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `LOG_DIR` | Directory for log files |
-| `PSA_SYNC_DATA_DIR` | Directory for PSA label data |
-| `EN_OPS_UTILS_HOME` | Path to en-ops-utils repository |
-| `HARVEST_SOLR_HOME` | Path to harvest-solr installation |
-| `HARVEST_SOLR_CONF_HOME` | Harvest config directory |
-| `PDS4_SOLR_DOC_HOME` | Solr document output directory |
-| `REGISTRY_MGR_SOLR_HOME` | Path to registry-manager-solr |
-| `EMAIL_RECIPIENTS` | Email addresses (comma-separated) |
+Create `psa_download.env` based on `psa_download.env.example`:
 
-### Optional Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HOSTNAME_LABEL` | `$(hostname)` | Label for email subject |
-| `CONDA_ENV` | None | Conda environment name |
-| `CONDA_HOME` | Auto-detected | Conda installation path |
-| `JAVA_HOME` | None | Java installation path |
-| `HARVEST_CONFIG_FILE` | `harvest-policy-ipda.xml` | Harvest policy file |
-| `PSA_SYNC_EXCLUDES` | `nasa/pds` | Exclusion pattern for pds-sync-api |
-| `JAVA_TOOL_OPTIONS` | `-Xms2g -Xmx8g` | JVM memory options |
-| `SUCCESS_MARKER_FILE` | None | Success marker path for multi-machine coordination |
-
----
-
-## Command-Line Options
-
+**Download-specific (psa_download_and_harvest.sh):**
 ```bash
-./psa_sync_wrapper.sh [OPTIONS] [STEPS]
+# Data and logging
+export PSA_SYNC_DATA_DIR="/data/psa/labels"
+export PSA_DOWNLOAD_LOG_DIR="/logs/psa-download"
 
-STEPS (optional, defaults to all):
-    --download-labels   Download PSA Labels (step 1)
-    --create-docs       Run Harvest (step 2)
-    --load              Load into Registry (step 3)
+# Python environment
+export PSA_SYNC_CONDA_ENV="conda-env"
+export CONDA_HOME="/home/user/.conda"  # Optional, auto-detected if omitted
 
-OPTIONS:
-    -c, --config FILE   Load config from file (recommended)
-    -n, --no-email      Suppress email notification
-    -h, --help          Show help message
+# Download options
+export PSA_SYNC_EXCLUDES="nasa/pds"  # Optional, space-separated patterns
+
+# Harvest configuration
+export PSA_SYNC_HARVEST_SOLR_CONFIG_FILE="harvest-policy-ipda.xml"
+export HARVEST_SOLR_HOME="/path/to/harvest-legacy"
+export HARVEST_SOLR_CONF_HOME="/path/to/config"
+export HARVEST_SOLR_LOG_FILE="/logs/harvest/harvest_$(date +%Y%m%d_%H%M%S).log"
+
+# Output and coordination
+export PDS4_SOLR_DOC_HOME="/data/solr-docs"
+export HARVEST_SOLR_MARKER_FILE="/shared/.harvest_success"
+
+# Email notifications
+export LEGACY_REGISTRY_EMAIL_RECIPIENTS="ops@example.com"
+export HOSTNAME_LABEL="dev-machine"
 ```
 
-**Note:** Steps always execute in order (1→2→3) regardless of input order.
-
----
-
-## Usage Examples
-
+**Registry-specific (wrapper_registry.sh, set in .bash_profile):**
 ```bash
-# Run all three steps (default)
-./psa_sync_wrapper.sh -c my-config.env
+# Registry configuration
+export REGISTRY_MGR_SOLR_HOME="/path/to/registry-manager-solr"
+export REGISTRY_MGR_SOLR_LOG_FILE="/logs/registry/registry_$(date +%Y%m%d_%H%M%S).log"
 
-# Run only download step
-./psa_sync_wrapper.sh -c my-config.env --download-labels
+# Coordination (shared across machines)
+export HARVEST_SOLR_MARKER_FILE="/shared/.harvest_success"
+export LEGACY_REGISTRY_MARKER_DIR="/shared/markers"
 
-# Run download without email (testing)
-./psa_sync_wrapper.sh -c my-config.env -n --download-labels
+# Email and hostname (same as above)
+export LEGACY_REGISTRY_EMAIL_RECIPIENTS="ops@example.com"
+export HOSTNAME_LABEL="dev-machine"  # or "prod-machine"
 
-# Run harvest and load steps
-./psa_sync_wrapper.sh -c my-config.env --create-docs --load
-
-# Source config manually (alternative to -c flag)
-. my-config.env && ./psa_sync_wrapper.sh
+# Already set from psa_download.env
+export PDS4_SOLR_DOC_HOME="/data/solr-docs"
 ```
 
----
+### Configuration Files
 
-## Validation
+- `psa_download.env` - Configuration for download+harvest script
+- `psa_download.env.example` - Template with documentation
+- Store configs in the portal directory, reference via `-c` flag
 
-The script validates configuration **before execution**:
+## Workflow Diagram
 
-### Step 1 (download-labels)
-- Directories exist: EN_OPS_UTILS_HOME, PSA_SYNC_DATA_DIR
-- Python script exists: pds_sync_api.py
-- Python/conda available and configured
+```
+Weekly (Cron: every week, dev machine only)
+├─ psa_download_and_harvest.sh
+   ├─ Step 1: Download labels (pds-sync-api)
+   │  ├─ Success → email notification
+   │  └─ Failure → email notification, exit
+   ├─ Step 2: Harvest labels (harvest-solr)
+   │  ├─ Success → email notification, create .harvest_success marker
+   │  └─ Failure → email notification, no marker
 
-### Step 2 (create-docs)
-- Directories exist: HARVEST_SOLR_CONF_HOME, PDS4_SOLR_DOC_HOME
-- harvest-solr executable exists
-- Harvest config file exists
-- Java available (JAVA_HOME or system)
+Hourly (Cron: every hour, both machines)
+├─ wrapper_registry.sh (dev machine)
+│  ├─ Check .harvest_success marker exists?
+│  ├─ Check .registry_mgr_success_dev exists? (skip if yes)
+│  ├─ Step 3: Load into registry (registry-mgr-solr)
+│  ├─ Create .registry_mgr_success_dev marker
+│  └─ Email notification
+│
+├─ wrapper_registry.sh (prod machine)
+   ├─ Check .harvest_success marker exists?
+   ├─ Check .registry_mgr_success_prod exists? (skip if yes)
+   ├─ Step 3: Load into registry (registry-mgr-solr)
+   ├─ Create .registry_mgr_success_prod marker
+   ├─ Count markers: if 2, cleanup all markers
+   └─ Email notification
+```
 
-### Step 3 (load)
-- Directory exists: PDS4_SOLR_DOC_HOME
-- registry-mgr-solr executable exists
+## Lock Files
 
-### Email (if enabled)
-- EMAIL_RECIPIENTS has valid format
-- mail command available
+**Purpose:** Prevent concurrent script execution.
 
-**On validation failure:** Script exits with code 1 and clear error message.
+**psa_download_and_harvest.sh:**
+- Lock file: `$PSA_DOWNLOAD_LOG_DIR/psa_download.lock`
+- Created at start, removed on exit (success or failure)
+- If lock exists, script exits with error message
 
----
+**harvest-solr:**
+- Lock file: `$PDS4_SOLR_DOC_HOME/harvest-solr.lock`
+- Created at start, removed on exit
+- If lock exists, harvest exits with error message
 
 ## Email Notifications
 
-Email sent by default after execution (use `-n` to suppress).
+**Download step (psa_download_and_harvest.sh):**
+- Subject: `[PSA Download] Success/FAILED on <hostname>`
+- Sent after download completes or fails
+- Includes: exit code, data directory, timestamp, excludes
 
-### Email Contents
-- Hostname and timestamp
-- Steps executed
-- Success/failure status
-- Harvest summary (labels processed, docs created)
-- Error log excerpts (first 20 errors)
-- Log file location
+**Harvest step (harvest-solr):**
+- Subject: `[Harvest Solr] Succeeded/FAILED on <hostname>`
+- Sent after harvest completes or fails
+- Includes: summary (labels/docs), log file location, errors
 
-### Testing Email
-```bash
-# Test mail command
-echo "Test" | mail -s "Test Subject" "$EMAIL_RECIPIENTS"
+**Registry step (wrapper_registry.sh):**
+- Subject: `[Registry Mgr Solr] Succeeded/FAILED on <hostname>`
+- Sent after registry load completes or fails
+- Includes: log file location, last 50 log lines
 
-# Install mail utility if missing
-sudo apt-get install mailutils  # Debian/Ubuntu
-sudo yum install mailx          # CentOS/RHEL
-```
+**Requirements:**
+- `LEGACY_REGISTRY_EMAIL_RECIPIENTS` must be set
+- `mail` command must be available (install `mailutils` or `mailx`)
 
----
+## Marker Files
+
+**Harvest success marker** (`HARVEST_SOLR_MARKER_FILE`):
+- Created by harvest-solr on successful completion
+- Contains: timestamp, datetime
+- Signals wrapper_registry.sh to run
+- Removed when both machines complete registry load
+
+**Registry success markers** (per-machine):
+- Created by wrapper_registry.sh on successful load
+- Format: `.registry_mgr_success_<HOSTNAME_LABEL>`
+- Contains: timestamp, datetime, hostname, log file path
+- Removed when both machines complete (cleanup at count=2)
+
+**Marker file location:**
+- Must be on shared filesystem accessible to all machines
+- Set via `HARVEST_SOLR_MARKER_FILE` and `LEGACY_REGISTRY_MARKER_DIR`
 
 ## Logging
 
-Logs written to: `$LOG_DIR/psa_sync_YYYYMMDD_HHMMSS.log`
+**Download logs:**
+- Location: `$PSA_DOWNLOAD_LOG_DIR/psa_download_<timestamp>.log`
+- Contains: download progress, harvest output, timestamps
+- Created by psa_download_and_harvest.sh via `exec` redirect
 
-**Features:**
-- Output to both console and file (via `tee`)
-- Restrictive permissions (chmod 600)
-- Timestamped messages
-- Skipped steps marked with "(USER SKIPPED)"
+**Harvest logs:**
+- Location: `$HARVEST_SOLR_LOG_FILE` (if set)
+- Contains: harvest progress, summary, errors
+- Created by harvest-solr internal logging
 
-**Example log:**
-```
-===========================================
-=== [2025-01-15 14:23:45] Configuration Summary ===
-Log file:           /var/log/psa-sync/psa_sync_20250115_142345.log
-Hostname:           production-server
-Running 3 steps: download-labels create-docs load
-Email notification: Enabled
-===========================================
-✓ Configuration validated for steps: download-labels create-docs load
-=== [2025-01-15 14:23:46] Step 1: Downloading PSA Labels ===
-...
-```
-
----
-
-## Automation with Cron
-
-```cron
-# Run daily at 2 AM
-0 2 * * * /path/to/psa_sync_wrapper.sh -c /path/to/prod.env
-
-# Run weekly on Monday at 3 AM
-0 3 * * 1 /path/to/psa_sync_wrapper.sh -c /path/to/prod.env
-```
-
-**Best Practices:**
-- Use absolute paths
-- Test manually before scheduling
-- Set up log rotation:
-  ```bash
-  # /etc/logrotate.d/psa-sync
-  /var/log/psa-sync/*.log {
-      daily
-      rotate 30
-      compress
-      missingok
-  }
-  ```
-
----
-
-## Multi-Machine Workflows
-
-**Use Case:** Development machine runs full pipeline (steps 1-3), production machine loads to production registry (step 3) after development completes.
-
-### Success Marker + Cron Pattern
-
-**Benefits:**
-- **Secure**: No SSH keys, no network access, production controls execution
-- **Lightweight**: Cron does scheduling, exits immediately if no work
-- **Simple**: Standard tools, easy to debug
-- **Efficient**: Only runs when needed, self-cleaning
-
-### Directory Structure
-
-Mirrored on both machines:
-```
-portal/
-  ├── psa_sync_wrapper.sh       # Wrapper script
-  ├── dev.env                    # Development config (.gitignore protected)
-  ├── prod.env                   # Production config (.gitignore protected)
-  ├── check_and_load.sh          # Production checker (prod only)
-  └── check_and_load.env         # Checker config (prod only, .gitignore protected)
-```
-
-Shared filesystem:
-```
-/shared/filesystem/.psa_sync_ready   # Marker: dev writes, prod reads
-```
-
-### Setup
-
-**1. Development Machine:**
-
-Create `dev.env` from template:
-```bash
-cp psa_sync_wrapper.env.example dev.env
-chmod 600 dev.env
-```
-
-Edit `dev.env`:
-```bash
-# ... standard configuration ...
-SUCCESS_MARKER_FILE="/shared/filesystem/.psa_sync_ready"
-```
-
-Run normally:
-```bash
-./psa_sync_wrapper.sh -c dev.env  # Creates marker on success
-```
-
-**2. Production Machine:**
-
-Create configuration files:
-```bash
-cp dev.env prod.env
-cp check_and_load.env.example check_and_load.env
-chmod 600 prod.env check_and_load.env
-```
-
-Edit `prod.env` (based off `dev.env`):
-```bash
-# edit HOSTNAME_LABEL
-# edit other values if needed
-```
-
-Edit `check_and_load.env`:
-```bash
-MARKER_FILE="/shared/filesystem/.psa_sync_ready"
-WRAPPER_SCRIPT="./psa_sync_wrapper.sh"  # Relative path (both in same directory)
-WRAPPER_CONFIG="./prod.env"              # Relative path
-MAX_AGE_HOURS=24
-```
-
-Add to crontab (use absolute paths in cron):
-```cron
-# Check every 4 hours
-0 */4 * * * cd /full/path/to/portal && ./check_and_load.sh -c check_and_load.env >> /var/log/psa-sync/check.log 2>&1
-```
-
-### How It Works
-
-1. Development runs full pipeline, creates marker on success
-2. Production cron checks for marker every 4 hours
-3. If marker exists and fresh, runs step 3 (load)
-4. Removes marker after successful load
-
----
+**Registry logs:**
+- Location: `$REGISTRY_MGR_SOLR_LOG_FILE`
+- Contains: registry load progress, success/failure status
+- Created by wrapper_registry.sh via `exec` redirect
 
 ## Troubleshooting
 
-### Bash Version Issues
+### Download fails with "Permission denied"
 
-**"declare: -A: invalid option"**
-
-**Cause:** Bash version too old (< 4.0)
-
-**Solution:**
+**Check conda environment:**
 ```bash
-# Check version
-bash --version
-
-# macOS: Install newer bash via Homebrew
-brew install bash
-
-# Update shebang or run explicitly
-/usr/local/bin/bash ./psa_sync_wrapper.sh -c dev.env
+conda env list | grep $PSA_SYNC_CONDA_ENV
 ```
 
-### Configuration Issues
-
-**"Missing required environment variables"**
+**Verify pds-sync-api is installed:**
 ```bash
-# Solution: Use -c flag or source config
-./psa_sync_wrapper.sh -c my-config.env
+conda activate $PSA_SYNC_CONDA_ENV
+which pds-sync-api
 ```
 
-**"Config file not found"**
+### Harvest exits with OutOfMemoryError
+
+**Symptom:** Harvest completes successfully but crashes during teardown with Java heap space error.
+
+**Solution:** Already handled - harvest checks log for "0          Failed to get created" pattern to determine success even with non-zero exit code.
+
+**Increase heap (if needed):**
+(Legacy attempt. Does not work)
 ```bash
-# Solution: Verify path
-ls -l /path/to/config.env
+export JAVA_TOOL_OPTIONS="-Xms4g -Xmx16g"  # Increase from 8g to 16g
 ```
 
-### Python/Conda Issues
+### Registry not triggering after harvest completes
 
-**"Conda environment not found"**
+**Check harvest marker exists:**
 ```bash
-# List environments
-conda env list
-
-# Verify name matches
-CONDA_ENV="myenv"  # Must match exactly
+ls -l "$HARVEST_SOLR_MARKER_FILE"
 ```
 
-**"Python required but not found"**
+**Check registry markers:**
 ```bash
-# Check Python
-which python
-python --version
-
-# Or use conda
-CONDA_ENV="myenv"
+ls -la "$LEGACY_REGISTRY_MARKER_DIR"/.registry_mgr_success_*
 ```
 
-### Java Issues
-
-**"Java required but not found"**
+If registry markers exist from previous run, remove them:
 ```bash
-# Option 1: Set JAVA_HOME
-JAVA_HOME="/usr/lib/jvm/java-17-openjdk"
-
-# Option 2: Verify system Java
-which java
-java -version
+rm "$LEGACY_REGISTRY_MARKER_DIR"/.registry_mgr_success_*
 ```
 
-### Harvest Issues
-
-**"Harvest validation failed (labels ≠ docs)"**
+**Test wrapper_registry manually:**
 ```bash
-# Check logs for errors
-grep ERROR /var/log/psa-sync/psa_sync_*.log
-
-# Increase Java heap memory
-JAVA_TOOL_OPTIONS="-Xms4g -Xmx16g"
+./wrapper_registry.sh
 ```
 
-### Email Issues
+### No email notifications
 
-**"mail command not found"**
+**Check email configuration:**
 ```bash
-# Install mail utility
+echo $LEGACY_REGISTRY_EMAIL_RECIPIENTS
+command -v mail
+```
+
+**Install mail command:**
+```bash
 sudo apt-get install mailutils  # Debian/Ubuntu
-sudo yum install mailx          # CentOS/RHEL
-
-# Or disable email
-./psa_sync_wrapper.sh -n
+sudo yum install mailx          # RHEL/CentOS
 ```
 
----
+### Lock file stuck (script won't run)
 
-## Deployment Checklist
+**Remove stale lock file:**
+```bash
+rm "$PSA_DOWNLOAD_LOG_DIR/psa_download.lock"
+rm "$PDS4_SOLR_DOC_HOME/harvest-solr.lock"
+```
 
-### Configuration
-- [ ] Copy `psa_sync_wrapper.env.example` to secure location
-- [ ] Customize all required variables
-- [ ] Use absolute paths for all directories
-- [ ] Set permissions: `chmod 600 config.env`
+**Verify no process is actually running:**
+```bash
+ps aux | grep -E "(pds-sync-api|harvest-solr)" | grep -v grep
+```
 
-### Validation
-- [ ] Verify Java: `java -version`
-- [ ] Verify Python: `python --version`
-- [ ] Test email: `echo "Test" | mail -s "Test" "$EMAIL_RECIPIENTS"`
-- [ ] Verify all directory paths exist
+### Multiple processes spawning from cron
 
-### Testing
-- [ ] Test single step: `./psa_sync_wrapper.sh -c config.env --download-labels`
-- [ ] Verify logs written to `$LOG_DIR`
-- [ ] Run other steps: `./psa_sync_wrapper.sh -c config.env --create-docs --load`
-- [ ] Review log file for errors
+**Check for duplicate cron entries:**
+```bash
+crontab -l | grep -E "(psa_download|wrapper_registry)"
+```
 
-### Production
-- [ ] Test manual run before cron
-- [ ] Monitor first few cron runs
-- [ ] Set up log rotation
+**Check system-wide cron:**
+```bash
+sudo cat /etc/crontab
+sudo ls /etc/cron.d/
+```
 
----
+**Verify lock files are working** - should prevent concurrent runs.
 
-## Files in This Directory
+## Testing
 
-| File | Purpose |
-|------|---------|
-| `pds_sync_api.py` | Python script for downloading PSA labels |
-| `psa_sync_wrapper.sh` | Bash wrapper for complete workflow |
-| `psa_sync_wrapper.env.example` | Template for wrapper configuration |
-| `check_and_load.sh` | Production checker for multi-machine coordination |
-| `check_and_load.env.example` | Template for checker configuration |
-| `README.md` | This documentation |
+### Test download step only:
+```bash
+# Activate conda
+. "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate "$PSA_SYNC_CONDA_ENV"
 
----
+# Run download
+pds-sync-api -p "$PSA_SYNC_DATA_DIR" -e "$PSA_SYNC_EXCLUDES"
+```
 
-## See Also
+### Test full download+harvest:
+```bash
+./psa_download_and_harvest.sh -c psa_download.env
+```
 
-- [Main README](../../../../README.md) - Repository setup and development
-- [CLAUDE.md](../../../../CLAUDE.md) - Claude Code guidance
-- [Harvest and Registry](https://github.com/NASA-PDS/registry-mgr-solr) - harvest-solr and legacy-registry documentation
+### Test registry load:
+```bash
+# Create test harvest marker
+echo "timestamp=$(date +%s)" > "$HARVEST_SOLR_MARKER_FILE"
+
+# Run registry wrapper
+./wrapper_registry.sh
+```
+
+### Test marker cleanup:
+```bash
+# Create both registry markers manually
+echo "timestamp=$(date +%s)" > "$LEGACY_REGISTRY_MARKER_DIR/.registry_mgr_success_dev"
+echo "timestamp=$(date +%s)" > "$LEGACY_REGISTRY_MARKER_DIR/.registry_mgr_success_prod"
+
+# Run wrapper - should trigger cleanup
+./wrapper_registry.sh
+```
+
+## Maintenance
+
+### Weekly monitoring:
+- Check logs for errors in download/harvest/load
+- Verify email notifications received
+- Confirm markers are created and cleaned up
+
+### Monthly maintenance:
+- Review log disk usage in `PSA_DOWNLOAD_LOG_DIR` and `REGISTRY_MGR_SOLR_LOG_FILE` locations
+- Clean up old logs if needed (consider log rotation)
+- Verify cron jobs are running (`crontab -l`)
+
+### Quarterly review:
+- Validate environment variables are still correct
+- Check Java heap settings adequate for harvest data volume
+- Review email recipient list
+
+## Development Notes
+
+### Legacy system:
+- This is a legacy pipeline scheduled for retirement
+- No new features planned
+- Focus: stability and maintenance
+- OutOfMemoryError at harvest teardown is known issue, handled via log checking
+
+### Multi-machine coordination:
+- Hardcoded for exactly 2 machines (dev + prod)
+- Cleanup triggers when marker count reaches 2
+- To add more machines, update cleanup logic in wrapper_registry.sh
+
+### Marker file race conditions:
+- Possible if both machines complete simultaneously
+- Mitigated by cron hourly schedule (spreads out execution)
+- Both machines will eventually process work successfully

@@ -42,8 +42,9 @@ Required environment variables:
 | `scripts/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
 | `scripts/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
 | **Portal Tools** ([detailed docs](src/pds/en_ops_utils/portal/README.md)) | |
-| `pds-sync-api` | Downloads ESA PSA product XML files from the PDS search API and generates harvest config |
-| `psa_sync_wrapper.sh` | Automated wrapper for complete PSA sync workflow: download → harvest → load into registry |
+| `pds-sync-api` | Downloads ESA PSA product XML files from the PDS search API |
+| `psa_download_and_harvest.sh` | Orchestrates weekly PSA label download and Solr document generation |
+| `wrapper_registry.sh` | Loads Solr documents into Registry with multi-machine coordination |
 
 ### ldd-corral.py
 
@@ -84,20 +85,19 @@ scripts/pds-stats.py --github_repos validate mi-label transform --token $GITHUB_
 
 ### Portal Tools (PSA Label Sync)
 
-Tools for syncing ESA PSA labels and managing portal data ingestion. See [Portal Tools README](src/pds/en_ops_utils/portal/README.md) for detailed documentation.
+Automated pipeline for syncing ESA PSA labels into the PDS Registry. Three-step workflow: download → harvest → load, with multi-machine coordination and email notifications. See [Portal Tools README](src/pds/en_ops_utils/portal/README.md) for complete documentation.
 
 **Quick examples:**
 
 ```bash
-# Download PSA labels and generate harvest config
-pds-sync-api --node-name psa --download-path /data/psa/
+# Download PSA labels
+pds-sync-api -p /data/psa/labels -e nasa/pds
 
-# Automated workflow: download → harvest → load into registry
-bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env
+# Weekly: Download labels and generate Solr documents (steps 1+2)
+bash src/pds/en_ops_utils/portal/psa_download_and_harvest.sh -c psa_download.env
 
-# Run only specific steps
-bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env --download-labels
-bash src/pds/en_ops_utils/portal/psa_sync_wrapper.sh -c my-config.env --create-docs --load
+# Hourly: Load Solr documents into Registry (step 3, runs on multiple machines)
+bash src/pds/en_ops_utils/portal/wrapper_registry.sh
 ```
 
 ### NSSDCA Status Checker
