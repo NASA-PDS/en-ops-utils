@@ -461,7 +461,9 @@ def _download_product_collection_inventory(
     return (True, None)
 
 
-def _download(product: dict, download_path: str, force: bool = False, exclude_patterns: Optional[List[str]] = None) -> Tuple[bool, Optional[str]]:
+def _download(
+    product: dict, download_path: str, force: bool = False, exclude_patterns: Optional[List[str]] = None
+) -> Tuple[bool, Optional[str]]:
     """Download the XML label (and inventory, for Product_Collection) for ``product``.
 
     Skips labels already downloaded with a matching MD5 unless ``force`` is True.
@@ -500,7 +502,9 @@ def _download(product: dict, download_path: str, force: bool = False, exclude_pa
     return (True, None)
 
 
-def _download_products(download_path: str, url: str, force: bool = False, exclude_patterns: Optional[List[str]] = None) -> List[Tuple[str, str]]:
+def _download_products(
+    download_path: str, url: str, force: bool = False, exclude_patterns: Optional[List[str]] = None
+) -> List[Tuple[str, str]]:
     """Query the API at ``url`` and download matching XML labels to ``download_path``.
 
     Implements the algorithm from NASA-PDS/registry-legacy-solr#135:
@@ -534,7 +538,9 @@ def _download_products(download_path: str, url: str, force: bool = False, exclud
     return failed
 
 
-def easy_peasy(node_name: str, download_path: str, url: str, config: str, force: bool = False, exclude_patterns: Optional[List[str]] = None) -> None:
+def easy_peasy(
+    node_name: str, download_path: str, url: str, config: str, force: bool = False, exclude_patterns: Optional[List[str]] = None
+) -> None:
     """Download ESA-PSA ("easy peasy") product files and write a harvest config file.
 
     Args:

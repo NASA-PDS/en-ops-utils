@@ -98,3 +98,4 @@ scripts/nssdca/aip-count.txt
 # Config files (portal tools)
 src/pds/en_ops_utils/portal/*.env
 !src/pds/en_ops_utils/portal/*.env.example
+.envrc

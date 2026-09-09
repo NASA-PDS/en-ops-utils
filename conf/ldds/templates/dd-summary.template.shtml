@@ -16,7 +16,7 @@
 <body class="sidebar menu_datastandards menu_item_datastandards_schema">
 <!--[if IE]>
 <div id="IE">
-<![endif]--> 
+<![endif]-->
 
 <div id="header-container">
   <!--#include virtual="/include/header_logo.html" -->
@@ -45,7 +45,7 @@
 		<p>
             <b>Past versions of the data dictionaries can be found <a href="/datastandards/dictionaries/index-versions.shtml">here</a>.</b>
 		</p>
-		
+
 		<p>
 			Need help with creating a dictionary or where to start, please contact the <a href="mailto:pds-operator@jpl.nasa.gov">PDS Operator</a> at pds-operator@jpl.nasa.gov.
 		</p>
@@ -113,7 +113,7 @@
 	<div id="namespaces">
 		<h2>Namespaces</h2>
 		<p>
-			The PDS4 XML Schema and Schematron files are organized by namespace. 
+			The PDS4 XML Schema and Schematron files are organized by namespace.
 			For a list of existing namespaces, refer to the <a href="https://github.com/NASA-PDS/pds4-information-model/raw/main/docs/namespace-registry/pds-namespace-registry.csv">PDS Namespace Registry</a>.
 		</p>
 
@@ -142,7 +142,7 @@
         <p>
             Once all information is gathered, create a ticket <a href="https://github.com/NASA-PDS/operations/issues/new?template=-ldd-request--initialize-new-pds-ldd.yml">here</a> to initialize a new PDS LDD and register it with the PDS Namespace Registry.
         </p>
-		
+
 		<a class="toTop">Back to top</a>
 	</div>
 	<hr />
