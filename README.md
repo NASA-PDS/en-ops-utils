@@ -50,12 +50,12 @@ See individual script READMEs for script-specific requirements.
 | `scripts/repos/repo-corral.py` | Bulk-updates repos in the `NASA-PDS` org (e.g., propagating template changes) |
 | `scripts/pds-stats.py` | Fetches GitHub release download metrics for PDS software tools |
 | `scripts/context/check_duplicate_identifiers.py` | Scans a directory of PDS4 context XML files for duplicate `logical_identifier` values |
-| `scripts/portal/pds-sync-api.py` | Downloads ESA PSA product XML files from the PDS search API for harvest |
+| `scripts/registry/pds-sync-api.py` | Stub entry point for `pds-sync-api` console script (use the installed command instead) |
 | `scripts/nssdca/nssdca.py` | NSSDCA AIP/SIP delivery processing: unpacks archives, validates labels, posts to NSSDCA automator |
-| **Portal Tools** ([detailed docs](src/pds/en_ops_utils/portal/README.md)) | |
-| `pds-sync-api` | Downloads ESA PSA product XML files from the PDS search API |
-| `psa_download_and_harvest.sh` | Orchestrates weekly PSA label download and Solr document generation |
-| `wrapper_registry.sh` | Loads Solr documents into Registry with multi-machine coordination |
+| **Registry Sync** ([detailed docs](docs/registry-sync.md)) | |
+| `pds-sync-api` | Downloads ESA PSA product XML labels from the PDS search API |
+| `scripts/registry/psa_download_and_harvest.sh` | Orchestrates weekly PSA label download and Solr document generation |
+| `scripts/registry/wrapper_registry.sh` | Loads Solr documents into Registry with multi-machine coordination |
 
 ### ldd-corral.py
 
@@ -94,9 +94,9 @@ scripts/ldds/list_open_release_prs.py 1.26.0.0 --repo ldd-img --token $GITHUB_TO
 scripts/pds-stats.py --github_repos validate mi-label transform --token $GITHUB_TOKEN
 ```
 
-### Portal Tools (PSA Label Sync)
+### Registry Sync (PSA Label Sync)
 
-Automated pipeline for syncing ESA PSA labels into the PDS Registry. Three-step workflow: download → harvest → load, with multi-machine coordination and email notifications. See [Portal Tools README](src/pds/en_ops_utils/portal/README.md) for complete documentation.
+Automated pipeline for syncing ESA PSA labels into the PDS Registry. Three-step workflow: download → harvest → load, with multi-machine coordination and email notifications. See [Registry Sync docs](docs/registry-sync.md) for complete documentation.
 
 **Quick examples:**
 
@@ -105,10 +105,10 @@ Automated pipeline for syncing ESA PSA labels into the PDS Registry. Three-step 
 pds-sync-api -p /data/psa/labels -e nasa/pds
 
 # Weekly: Download labels and generate Solr documents (steps 1+2)
-bash src/pds/en_ops_utils/portal/psa_download_and_harvest.sh -c psa_download.env
+bash scripts/registry/psa_download_and_harvest.sh -c psa_download.env
 
 # Hourly: Load Solr documents into Registry (step 3, runs on multiple machines)
-bash src/pds/en_ops_utils/portal/wrapper_registry.sh
+bash scripts/registry/wrapper_registry.sh
 ```
 
 ### NSSDCA Scripts

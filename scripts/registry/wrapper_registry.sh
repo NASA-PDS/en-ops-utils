@@ -43,14 +43,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate required environment variables                                                                                                                                                                                        
+# Validate required environment variables
 for var in HOSTNAME_LABEL HARVEST_SOLR_MARKER_FILE LEGACY_REGISTRY_MARKER_DIR REGISTRY_MGR_SOLR_LOG_FILE \
-           LEGACY_REGISTRY_EMAIL_RECIPIENTS PDS4_SOLR_DOC_HOME REGISTRY_MGR_SOLR_HOME; do                                                                                                                                        
-    if [[ -z "${!var}" ]]; then                                                                                                                                                                                                  
-        echo "ERROR: $var environment variable is not set" >&2                                                                                                                                                                   
-        exit 1                                                                                                                                                                                                                   
-    fi                                                                                                                                                                                                                           
-done 
+           LEGACY_REGISTRY_EMAIL_RECIPIENTS PDS4_SOLR_DOC_HOME REGISTRY_MGR_SOLR_HOME; do
+    if [[ -z "${!var}" ]]; then
+        echo "ERROR: $var environment variable is not set" >&2
+        exit 1
+    fi
+done
 
 send_notification() {
     # Send email notification ($1=exit_code, $2=log_file)
@@ -133,10 +133,10 @@ if [[ $REGISTRY_MGR_SOLR_EXIT -ne 0 ]]; then
     exit $REGISTRY_MGR_SOLR_EXIT
 fi
 
-echo "[$(date -Iseconds)] Registry load completed successfully" 
+echo "[$(date -Iseconds)] Registry load completed successfully"
 
 # 4. Create registry marker
-echo "[$(date -Iseconds)] Creating registry success marker: $REGISTRY_MGR_SOLR_MARKER_FILE" 
+echo "[$(date -Iseconds)] Creating registry success marker: $REGISTRY_MGR_SOLR_MARKER_FILE"
 {
     echo "# Registry Success Marker"
     echo "# This file signals that registry loaded docs successfully on this machine."
@@ -146,7 +146,7 @@ echo "[$(date -Iseconds)] Creating registry success marker: $REGISTRY_MGR_SOLR_M
     echo "log_file=$REGISTRY_MGR_SOLR_LOG_FILE"
 } > "$REGISTRY_MGR_SOLR_MARKER_FILE"
 chmod 600 "$REGISTRY_MGR_SOLR_MARKER_FILE"
-echo "[$(date -Iseconds)] ✓ Registry marker created" 
+echo "[$(date -Iseconds)] ✓ Registry marker created"
 
 # 5. Send success email
 send_notification 0 "$REGISTRY_MGR_SOLR_LOG_FILE"
@@ -154,29 +154,29 @@ send_notification 0 "$REGISTRY_MGR_SOLR_LOG_FILE"
 # 6. Possible cleanup - are both registry markers present?
 REGISTRY_MARKER_COUNT=$(ls "${LEGACY_REGISTRY_MARKER_DIR}"/.registry_mgr_success_* 2>/dev/null | wc -l | tr -d ' ')
 
-echo "[$(date -Iseconds)] Checking for cleanup: found $REGISTRY_MARKER_COUNT registry marker(s)" 
+echo "[$(date -Iseconds)] Checking for cleanup: found $REGISTRY_MARKER_COUNT registry marker(s)"
 
 if [[ "$REGISTRY_MARKER_COUNT" -eq 2 ]]; then
-    echo "[$(date -Iseconds)] All machines complete - cleaning up markers" 
+    echo "[$(date -Iseconds)] All machines complete - cleaning up markers"
 
     # Remove harvest marker
     if [[ -f "$HARVEST_SOLR_MARKER_FILE" ]]; then
         rm -f "$HARVEST_SOLR_MARKER_FILE"
-        echo "[$(date -Iseconds)] ✓ Removed harvest marker: $HARVEST_SOLR_MARKER_FILE" 
+        echo "[$(date -Iseconds)] ✓ Removed harvest marker: $HARVEST_SOLR_MARKER_FILE"
     fi
 
     # Remove all registry markers
     for marker in "${LEGACY_REGISTRY_MARKER_DIR}"/.registry_mgr_success_*; do
         if [[ -f "$marker" ]]; then
             rm -f "$marker"
-            echo "[$(date -Iseconds)] ✓ Removed registry marker: $marker" 
+            echo "[$(date -Iseconds)] ✓ Removed registry marker: $marker"
         fi
     done
 
-    echo "[$(date -Iseconds)] ✓ Cleanup complete" 
+    echo "[$(date -Iseconds)] ✓ Cleanup complete"
 else
-    echo "[$(date -Iseconds)] Waiting for other machine to complete - this marker remains" 
+    echo "[$(date -Iseconds)] Waiting for other machine to complete - this marker remains"
 fi
 
-echo "[$(date -Iseconds)] Done" 
+echo "[$(date -Iseconds)] Done"
 exit 0
