@@ -1,4 +1,4 @@
-# Portal Tools - PSA Label Sync Pipeline
+# Registry Sync - PSA Label Sync Pipeline
 
 Automated pipeline for syncing ESA Planetary Science Archive (PSA) labels into the PDS Registry.
 
@@ -21,7 +21,7 @@ Note: Step 3 (ingest documents into Registry with `wrapper_registry.sh`) happens
 
 ## Scripts
 
-### `pds_sync_api.py`
+### `pds-sync-api`
 
 Downloads PSA product XML labels from PDS Search API.
 
@@ -43,13 +43,13 @@ pds-sync-api -p /data/psa/labels -e nasa/pds
 
 ---
 
-### `psa_download_and_harvest.sh`
+### `scripts/registry/psa_download_and_harvest.sh`
 
 Orchestrates steps 1+2: Downloads labels then runs Harvest to create Solr documents.
 
 **Usage:**
 ```bash
-./psa_download_and_harvest.sh -c psa_download.env
+bash scripts/registry/psa_download_and_harvest.sh -c psa_download.env
 ```
 
 **Options:**
@@ -66,18 +66,18 @@ Orchestrates steps 1+2: Downloads labels then runs Harvest to create Solr docume
 
 **Cron setup (weekly):**
 ```cron
-@weekly . ~/.bash_profile && cd /path/to/portal/ && ./psa_download_and_harvest.sh -c psa_download.env
+@weekly . ~/.bash_profile && cd /path/to/en-ops-utils && bash scripts/registry/psa_download_and_harvest.sh -c psa_download.env
 ```
 
 ---
 
-### `wrapper_registry.sh`
+### `scripts/registry/wrapper_registry.sh`
 
 Loads Solr documents into Registry with multi-machine coordination.
 
 **Usage:**
 ```bash
-./wrapper_registry.sh
+bash scripts/registry/wrapper_registry.sh
 ```
 
 **Options:**
@@ -93,7 +93,7 @@ Loads Solr documents into Registry with multi-machine coordination.
 
 **Cron setup (hourly on both dev and prod machines):**
 ```cron
-@hourly . ~/.bash_profile && /path/to/portal/wrapper_registry.sh
+@hourly . ~/.bash_profile && cd /path/to/en-ops-utils && bash scripts/registry/wrapper_registry.sh
 ```
 
 **Multi-machine coordination:**
@@ -107,7 +107,7 @@ Loads Solr documents into Registry with multi-machine coordination.
 
 ### Required Environment Variables
 
-Create `psa_download.env` based on `psa_download.env.example`:
+Create `psa_download.env` based on `scripts/registry/psa_download.env.example`:
 
 **Download-specific (psa_download_and_harvest.sh):**
 ```bash
@@ -116,8 +116,8 @@ export PSA_SYNC_DATA_DIR="/data/psa/labels"
 export PSA_DOWNLOAD_LOG_DIR="/logs/psa-download"
 
 # Python environment
-export PSA_SYNC_CONDA_ENV="conda-env"
-export CONDA_HOME="/home/user/.conda"  # Optional, auto-detected if omitted
+export PSA_SYNC_CONDA_ENV="<conda-env-name>"
+export CONDA_HOME="/home/<user>/.conda"  # Optional, auto-detected if omitted
 
 # Download options
 export PSA_SYNC_EXCLUDES="nasa/pds"  # Optional, space-separated patterns
@@ -157,9 +157,8 @@ export PDS4_SOLR_DOC_HOME="/data/solr-docs"
 
 ### Configuration Files
 
-- `psa_download.env` - Configuration for download+harvest script
-- `psa_download.env.example` - Template with documentation
-- Store configs in the portal directory, reference via `-c` flag
+- `psa_download.env` - Configuration for download+harvest script (create locally, not committed)
+- `scripts/registry/psa_download.env.example` - Template with documentation
 
 ## Workflow Diagram
 
@@ -284,7 +283,7 @@ which pds-sync-api
 **Increase heap (if needed):**
 (Legacy attempt. Does not work)
 ```bash
-export JAVA_TOOL_OPTIONS="-Xms4g -Xmx16g"  # Increase from 8g to 16g
+export JAVA_TOOL_OPTIONS="-Xms4g -Xmx16g"
 ```
 
 ### Registry not triggering after harvest completes
@@ -306,7 +305,7 @@ rm "$LEGACY_REGISTRY_MARKER_DIR"/.registry_mgr_success_*
 
 **Test wrapper_registry manually:**
 ```bash
-./wrapper_registry.sh
+bash scripts/registry/wrapper_registry.sh
 ```
 
 ### No email notifications
@@ -355,26 +354,21 @@ sudo ls /etc/cron.d/
 
 ### Test download step only:
 ```bash
-# Activate conda
 . "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate "$PSA_SYNC_CONDA_ENV"
-
-# Run download
 pds-sync-api -p "$PSA_SYNC_DATA_DIR" -e "$PSA_SYNC_EXCLUDES"
 ```
 
 ### Test full download+harvest:
 ```bash
-./psa_download_and_harvest.sh -c psa_download.env
+bash scripts/registry/psa_download_and_harvest.sh -c psa_download.env
 ```
 
 ### Test registry load:
 ```bash
 # Create test harvest marker
 echo "timestamp=$(date +%s)" > "$HARVEST_SOLR_MARKER_FILE"
-
-# Run registry wrapper
-./wrapper_registry.sh
+bash scripts/registry/wrapper_registry.sh
 ```
 
 ### Test marker cleanup:
@@ -382,9 +376,8 @@ echo "timestamp=$(date +%s)" > "$HARVEST_SOLR_MARKER_FILE"
 # Create both registry markers manually
 echo "timestamp=$(date +%s)" > "$LEGACY_REGISTRY_MARKER_DIR/.registry_mgr_success_dev"
 echo "timestamp=$(date +%s)" > "$LEGACY_REGISTRY_MARKER_DIR/.registry_mgr_success_prod"
-
 # Run wrapper - should trigger cleanup
-./wrapper_registry.sh
+bash scripts/registry/wrapper_registry.sh
 ```
 
 ## Maintenance
@@ -415,7 +408,7 @@ echo "timestamp=$(date +%s)" > "$LEGACY_REGISTRY_MARKER_DIR/.registry_mgr_succes
 ### Multi-machine coordination:
 - Hardcoded for exactly 2 machines (dev + prod)
 - Cleanup triggers when marker count reaches 2
-- To add more machines, update cleanup logic in wrapper_registry.sh
+- To add more machines, update cleanup logic in `scripts/registry/wrapper_registry.sh`
 
 ### Marker file race conditions:
 - Possible if both machines complete simultaneously

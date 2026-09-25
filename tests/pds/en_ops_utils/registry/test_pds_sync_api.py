@@ -1,23 +1,24 @@
 # encoding: utf-8
-"""Tests for pds.en_ops_utils.portal.pds_sync_api."""
+"""Tests for pds.en_ops_utils.registry.pds_sync_api."""
 import hashlib
 import ipaddress
 import os
 import tempfile
 from http import HTTPStatus
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
+from unittest.mock import patch
 
 import pytest
 import requests
 from lxml import etree
-from pds.en_ops_utils.portal.pds_sync_api import _already_downloaded
-from pds.en_ops_utils.portal.pds_sync_api import _check_registry_response
-from pds.en_ops_utils.portal.pds_sync_api import _get_lidvid
-from pds.en_ops_utils.portal.pds_sync_api import _is_retryable_error
-from pds.en_ops_utils.portal.pds_sync_api import _should_exclude_url
-from pds.en_ops_utils.portal.pds_sync_api import _validate_ip_address
-from pds.en_ops_utils.portal.pds_sync_api import _validate_url
-from pds.en_ops_utils.portal.pds_sync_api import _write_harvest_config
+from pds.en_ops_utils.registry.pds_sync_api import _already_downloaded
+from pds.en_ops_utils.registry.pds_sync_api import _check_registry_response
+from pds.en_ops_utils.registry.pds_sync_api import _get_lidvid
+from pds.en_ops_utils.registry.pds_sync_api import _is_retryable_error
+from pds.en_ops_utils.registry.pds_sync_api import _should_exclude_url
+from pds.en_ops_utils.registry.pds_sync_api import _validate_ip_address
+from pds.en_ops_utils.registry.pds_sync_api import _validate_url
+from pds.en_ops_utils.registry.pds_sync_api import _write_harvest_config
 
 
 # ---------------------------------------------------------------------------
@@ -179,14 +180,14 @@ def test_validate_ip_address_rejects_multicast():
 
 def test_validate_url_accepts_https():
     """HTTPS URLs with global hostnames are accepted."""
-    with patch("pds.en_ops_utils.portal.pds_sync_api.socket.getaddrinfo",
+    with patch("pds.en_ops_utils.registry.pds_sync_api.socket.getaddrinfo",
                return_value=[((2, 1, 6, "", ("8.8.8.8", 443)))]):
         _validate_url("https://example.com/api")
 
 
 def test_validate_url_accepts_http():
     """HTTP URLs with global hostnames are accepted."""
-    with patch("pds.en_ops_utils.portal.pds_sync_api.socket.getaddrinfo",
+    with patch("pds.en_ops_utils.registry.pds_sync_api.socket.getaddrinfo",
                return_value=[((2, 1, 6, "", ("1.1.1.1", 80)))]):
         _validate_url("http://example.com/api")
 
@@ -237,7 +238,7 @@ def test_validate_url_rejects_localhost():
 
 def test_validate_url_rejects_private_ips():
     """URLs resolving to private IPs are rejected."""
-    with patch("pds.en_ops_utils.portal.pds_sync_api.socket.getaddrinfo",
+    with patch("pds.en_ops_utils.registry.pds_sync_api.socket.getaddrinfo",
                return_value=[((2, 1, 6, "", ("192.168.1.1", 80)))]):
         with pytest.raises(ValueError, match="non-global IP address"):
             _validate_url("http://internal.corp/api")
@@ -245,7 +246,7 @@ def test_validate_url_rejects_private_ips():
 
 def test_validate_url_rejects_aws_metadata():
     """URLs resolving to AWS metadata service are rejected."""
-    with patch("pds.en_ops_utils.portal.pds_sync_api.socket.getaddrinfo",
+    with patch("pds.en_ops_utils.registry.pds_sync_api.socket.getaddrinfo",
                return_value=[((2, 1, 6, "", ("169.254.169.254", 80)))]):
         with pytest.raises(ValueError, match="non-global IP address"):
             _validate_url("http://metadata.service/")
@@ -254,7 +255,7 @@ def test_validate_url_rejects_aws_metadata():
 def test_validate_url_rejects_dns_failure():
     """URLs that cannot be resolved are rejected."""
     import socket
-    with patch("pds.en_ops_utils.portal.pds_sync_api.socket.getaddrinfo",
+    with patch("pds.en_ops_utils.registry.pds_sync_api.socket.getaddrinfo",
                side_effect=socket.gaierror("Name or service not known")):
         with pytest.raises(ValueError, match="Cannot resolve hostname"):
             _validate_url("http://nonexistent.invalid/")
@@ -268,14 +269,14 @@ def test_validate_url_rejects_username_only():
 
 def test_validate_url_accepts_paths():
     """URLs with paths are accepted."""
-    with patch("pds.en_ops_utils.portal.pds_sync_api.socket.getaddrinfo",
+    with patch("pds.en_ops_utils.registry.pds_sync_api.socket.getaddrinfo",
                return_value=[((2, 1, 6, "", ("8.8.8.8", 443)))]):
         _validate_url("https://api.example.com/v1/products/search")
 
 
 def test_validate_url_accepts_ports():
     """URLs with explicit port numbers are accepted."""
-    with patch("pds.en_ops_utils.portal.pds_sync_api.socket.getaddrinfo",
+    with patch("pds.en_ops_utils.registry.pds_sync_api.socket.getaddrinfo",
                return_value=[((2, 1, 6, "", ("8.8.8.8", 8080)))]):
         _validate_url("https://api.example.com:8080/endpoint")
 

@@ -24,6 +24,16 @@ Required environment variables (set before running most scripts):
 
 ## Commands
 
+Before committing or pushing, always run pre-commit and tox locally to catch lint and test failures before CI:
+
+```bash
+# Run pre-commit checks on all staged files (required before every commit)
+pre-commit run --all-files
+
+# Run full tox matrix (required before pushing)
+tox
+```
+
 ```bash
 # Run all tests
 pytest --verbose tests/ test/

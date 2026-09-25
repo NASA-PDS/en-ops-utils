@@ -557,7 +557,7 @@ def print_github_comment_to_notify_submitter():
             if r[0] in lid:
                 rsynced_lids.append(lid)
                 break
-    
+
     quantity = 'single' if len(rsynced) == 1 else 'multiple'
     lid_ish = 'LID' if quantity == 'single' else 'LIDs'
     comment_start = '- this set has' if quantity == 'single' else f'- these {len(rsynced)} sets have' if quantity == 'multiple' else '--SOMETHING IS WRONG HERE--'
