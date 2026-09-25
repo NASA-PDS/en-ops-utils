@@ -96,7 +96,7 @@ template = '''<?xml version="1.0" encoding="UTF-8"?>
                     <maximum_field_length unit="byte">1</maximum_field_length>
                     <field_format>%1s</field_format>
                     <description>Member Status of the files in the collection.</description>
-                </Field_Delimited>                
+                </Field_Delimited>
                 <Field_Delimited>
                     <name>LIDVID_LID</name>
                     <field_number>2</field_number>
@@ -160,7 +160,7 @@ def flattenPaths(path):
             if x: toReturn.extend(x)
     elif re.search(r"\.xml$", path):
         toReturn.append(path)
-	# else: 
+	# else:
     return toReturn
 
 
