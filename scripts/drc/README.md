@@ -304,7 +304,8 @@ DRCError (base)
 ├── HTMLFileNotFoundError
 ├── InvalidHTMLFilenameError
 ├── YearOrderError
-└── MissingDateCellError
+├── MissingDateCellError
+└── MissingHyperlinkError
 ```
 
 All exceptions provide detailed error messages with context.
@@ -501,6 +502,9 @@ setup.cfg                        # Entry point: drc = pds.en_ops_utils.drc.cli:m
 
 **v2.1** (2026-11-11)
 - `--update-files` accepts optional `--year YYYY` to update a previous year's HTML and JSON
+- Clear error for a "Link" cell with no hyperlink (reports row, column, and worksheet)
+- Warns when Actual Release Date is set but Link is not "Link" (reports row and worksheet)
+- Expected `DRCError`s now log a one-line message; tracebacks only with `--debug`
 
 **v2.0** (2026-08-19) — Major refactoring
 - Added `DRCExcelFile` dataclass for better encapsulation

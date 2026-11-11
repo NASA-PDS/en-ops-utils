@@ -109,6 +109,11 @@ class MissingDateCellError(DRCError):
     pass
 
 
+class MissingHyperlinkError(DRCError):
+    """Link cell has no hyperlink attached in Excel."""
+    pass
+
+
 # ============================================================================
 # DATA CLASS
 # ============================================================================
@@ -730,7 +735,16 @@ def massage_link_column(cell):
 
     Returns:
         URL string from hyperlink target
+
+    Raises:
+        MissingHyperlinkError: If the cell says 'Link' but has no hyperlink attached
     """
+    if cell.hyperlink is None:
+        raise MissingHyperlinkError(
+            f'Cell has no hyperlink in row {cell.row}, column {cell.column_letter} '
+            f'of worksheet "{cell.parent.title}". The cell text is "{cell.value}" but no URL '
+            f'is attached; re-add the link in Excel.'
+        )
     return cell.hyperlink.target
 
 
@@ -763,6 +777,13 @@ def process_excel_cell(j, cell, data_row, row_index, excel_file):
         value = massage_datetime_column(cell.value) if isinstance(cell.value, datetime) else cell.value
         data_row[j - 1] = value
     elif j == 7:  # Column H: Link
+        actual_date = cell.parent.cell(row=row_index, column=7).value  # Column G
+        if isinstance(actual_date, datetime) and cell.value != 'Link':
+            logger.warning(
+                'Actual Release Date is set but Link is %r '
+                'in row %d of worksheet "%s".',
+                cell.value, row_index, cell.parent.title
+            )
         data_row[j - 1] = massage_link_column(cell) if cell.value == 'Link' else cell.value
     elif j > 7:  # Ignore columns beyond H
         logger.debug('  Ignoring column %d (beyond expected range)', j)
@@ -1005,7 +1026,8 @@ def main(**args):
             raise DRCError('Unrecognized combination of arguments. Use `--help` for usage information.')
 
     except DRCError as e:
-        logger.exception(str(e))
+        # Expected, user-fixable errors: the message is enough unless debugging
+        logger.error(str(e), exc_info=logger.isEnabledFor(logging.DEBUG))
         sys.exit(1)
     except Exception as e:
         logger.exception('Unexpected error occurred')
