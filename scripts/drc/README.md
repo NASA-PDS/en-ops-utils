@@ -185,6 +185,25 @@ python scripts/drc/drc.py --update-files [--year YYYY]
 
 `YYYY` is the current year unless `--year` is given. Note that the HTML link and "Last updated" date are updated for the chosen year too, even if it's a past year.
 
+### Prune Old Excel Files
+
+```bash
+python scripts/drc/drc.py --prune-excel [--dry-run]
+```
+
+**What it does:**
+Deletes `PDS_Data_Release_Calendar_YYYYMMDD_vN.xlsx` files in `datasearch/subscription-service/` whose filename date is more than 3 months before today (`EXCEL_RETENTION_MONTHS` in `drc.py`).
+
+**Never deleted:**
+- The latest Excel (the one `--create-excel` copies from and `--update-files` reads), even if it is older than 3 months
+- Any Excel still linked from a `*.shtml` page in the same directory (e.g., a previous year's page)
+- Future-dated planning files
+
+**Notes:**
+- Age comes from the date in the filename, not the file's modified time.
+- Run with `--dry-run` first to list what would be deleted. Deleted files can only be recovered from git.
+- This is a separate command; `--create-excel` and `--update-files` do not prune.
+
 ### Initialize New Year
 
 ```bash
@@ -505,6 +524,8 @@ setup.cfg                        # Entry point: drc = pds.en_ops_utils.drc.cli:m
 - Clear error for a "Link" cell with no hyperlink (reports row, column, and worksheet)
 - Warns when Actual Release Date is set but Link is not "Link" (reports row and worksheet)
 - Expected `DRCError`s now log a one-line message; tracebacks only with `--debug`
+- Added `--prune-excel` (`-p`) to delete Excel files dated more than 3 months ago, with optional `--dry-run`;
+  never deletes the latest Excel or files still linked from an HTML page
 
 **v2.0** (2026-08-19) — Major refactoring
 - Added `DRCExcelFile` dataclass for better encapsulation

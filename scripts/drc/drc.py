@@ -18,6 +18,9 @@ Usage:
     # Update HTML and JSON for a specific (e.g., previous) year
     python drc.py --update-files --year 2025
 
+    # Delete Excel files older than 3 months (add --dry-run to preview)
+    python drc.py --prune-excel
+
     # Initialize files for new year (requires manual ROSES link cleanup)
     python drc.py --initialize-new --year 2027
 
@@ -59,6 +62,9 @@ if not REPO_PATH.exists():
     sys.exit(f'ERROR: Repository path not found: {REPO_PATH}. Set DRC_REPO_PATH environment variable.')
 
 DRC_PATH = Path('datasearch/subscription-service')
+
+# Excel files dated more than this many months ago are deleted by --prune-excel
+EXCEL_RETENTION_MONTHS = 3
 
 # Global state (to be minimized over time)
 DEBUG = False
@@ -368,6 +374,51 @@ class DRCService:
 
         return None
 
+    def find_linked_excel_filenames(self) -> set:
+        """
+        Find Excel filenames linked from any HTML page in the DRC directory.
+
+        Returns:
+            Set of Excel filenames referenced by data-release-calendar*.shtml files
+        """
+        pattern = rf'{DRCExcelFile.FILENAME_PREFIX}_\d{{8}}_v\d+\.xlsx'
+        linked = set()
+        for html_path in self.drc_dir.glob('*.shtml'):
+            linked.update(re.findall(pattern, html_path.read_text(errors='replace')))
+        return linked
+
+    def find_prunable_excels(self, cutoff_date: str, latest: DRCExcelFile) -> List[DRCExcelFile]:
+        """
+        Find Excel files that are safe to delete.
+
+        Args:
+            cutoff_date: Files dated strictly before this (YYYYMMDD) are candidates
+            latest: Most recent Excel file (never pruned; the next update copies from it)
+
+        Returns:
+            Candidates sorted oldest first, excluding the latest file and any file
+            still linked from an HTML page.
+
+        Note:
+            Age is taken from the date in the filename, not the file's mtime.
+            Future-dated planning entries are never older than the cutoff.
+        """
+        linked = self.find_linked_excel_filenames()
+        prunable = []
+
+        for path in self.drc_dir.glob(DRCExcelFile.get_filename_glob()):
+            excel_file = DRCExcelFile.from_path(path)
+            if not excel_file or excel_file.date >= cutoff_date:
+                continue
+            if excel_file == latest:
+                logger.info('Keeping %s (latest)', excel_file.filename)
+            elif excel_file.filename in linked:
+                logger.info('Keeping %s (linked from an HTML page)', excel_file.filename)
+            else:
+                prunable.append(excel_file)
+
+        return sorted(prunable)
+
     def determine_target_excel(
         self,
         latest: DRCExcelFile,
@@ -513,6 +564,14 @@ def parse_arguments():
         type=int,
         metavar='')
 
+    parser.add_argument('-p', '--prune-excel',
+        help=f'Delete Excel files dated more than {EXCEL_RETENTION_MONTHS} months ago. '
+             'Never deletes the latest Excel or any Excel still linked from an HTML page.',
+        action='store_true')
+    parser.add_argument('--dry-run',
+        help='Use with `--prune-excel`. List files that would be deleted without deleting them.',
+        action='store_true')
+
     parser.add_argument('--debug',
         help='Enable debug logging',
         action='store_true')
@@ -580,6 +639,19 @@ def get_year_from_html_filename(html_path: Path) -> str:
     if not match:
         raise InvalidHTMLFilenameError(f'Could not parse year from filename: {html_path.name}')
     return match.group(1)
+
+
+def subtract_months(d: date, months: int) -> date:
+    """
+    Return the date `months` calendar months before `d`.
+
+    The day is clamped to the last day of the resulting month
+    (e.g., 2026-05-31 minus 3 months is 2026-02-28).
+    """
+    month_index = d.year * 12 + (d.month - 1) - months
+    year, month0 = divmod(month_index, 12)
+    month = month0 + 1
+    return date(year, month, min(d.day, calendar.monthrange(year, month)[1]))
 
 
 def validate_year_string(year: str) -> None:
@@ -900,6 +972,39 @@ def update_regulars_for(year: str, latest_excel: DRCExcelFile, current_date: dat
     update_html_for(year, latest_excel, current_date, initialize_new)
 
 
+def prune_old_excels(service: DRCService, latest_excel: DRCExcelFile, today: date,
+                     dry_run: bool = False):
+    """
+    Delete Excel files dated more than EXCEL_RETENTION_MONTHS before today.
+
+    Args:
+        service: DRC service for the DRC directory
+        latest_excel: Most recent Excel file (always kept)
+        today: Current date
+        dry_run: If True, only log what would be deleted
+
+    Side Effects:
+        Deletes files from the DRC directory (unless dry_run).
+    """
+    cutoff = subtract_months(today, EXCEL_RETENTION_MONTHS)
+    logger.info('Pruning Excel files dated before %s', cutoff.isoformat())
+
+    prunable = service.find_prunable_excels(cutoff.strftime('%Y%m%d'), latest_excel)
+    if not prunable:
+        logger.info('No Excel files to delete.')
+        return
+
+    for excel_file in prunable:
+        if dry_run:
+            logger.info('Would delete %s', excel_file.filename)
+        else:
+            excel_file.path.unlink()
+            logger.info('Deleted %s', excel_file.filename)
+
+    verb = 'Would delete' if dry_run else 'Deleted'
+    logger.info('%s %d Excel file(s).', verb, len(prunable))
+
+
 def update_support_for(year: str):
     """
     Update the "support" files for a new year: JS and redirect HTML.
@@ -1003,6 +1108,10 @@ def main(**args):
             else:
                 year = today.strftime('%Y')
             update_regulars_for(year, latest_excel, today, initialize_new=False)
+
+        # Handle prune-excel command
+        elif args['prune_excel']:
+            prune_old_excels(service, latest_excel, today, args['dry_run'])
 
         # Handle year-based commands
         elif args['year']:
