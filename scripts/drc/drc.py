@@ -15,6 +15,9 @@ Usage:
     # Update HTML and JSON after editing Excel
     python drc.py --update-files
 
+    # Update HTML and JSON for a specific (e.g., previous) year
+    python drc.py --update-files --year 2025
+
     # Initialize files for new year (requires manual ROSES link cleanup)
     python drc.py --initialize-new --year 2027
 
@@ -488,7 +491,8 @@ def parse_arguments():
         metavar='')
 
     parser.add_argument('-u', '--update-files',
-        help='Update the HTML and JSON files after editing Excel.',
+        help='Update the HTML and JSON files after editing Excel. Defaults to the current year; '
+             'use with `--year YEAR` to update a different (e.g., previous) year.',
         action='store_true')
 
     parser.add_argument('-i', '--initialize-new',
@@ -499,7 +503,8 @@ def parse_arguments():
         action='store_true')
 
     parser.add_argument('-y', '--year',
-        help='Specific year (YYYY format) for `--initialize-new` or `--finish-new`.',
+        help='Specific year (YYYY format) for `--update-files` (optional), '
+             '`--initialize-new` or `--finish-new`.',
         type=int,
         metavar='')
 
@@ -965,7 +970,17 @@ def main(**args):
 
         # Handle update-files command
         elif args['update_files']:
-            year = today.strftime('%Y')
+            if args['year']:
+                year = str(args['year'])
+                validate_year_string(year)
+                html_path = get_drc_dir() / f'data-release-calendar-{year}.shtml'
+                if not html_path.exists():
+                    raise HTMLFileNotFoundError(
+                        f'No HTML file for year {year}: {html_path.name}. '
+                        f'Use `--initialize-new --year {year}` to create a new year.'
+                    )
+            else:
+                year = today.strftime('%Y')
             update_regulars_for(year, latest_excel, today, initialize_new=False)
 
         # Handle year-based commands

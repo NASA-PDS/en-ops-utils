@@ -170,15 +170,20 @@ python scripts/drc/drc.py --create-excel [--excel-version VERSION]
 ### Update Files
 
 ```bash
-python scripts/drc/drc.py --update-files
+python scripts/drc/drc.py --update-files [--year YYYY]
 ```
+
+**Options:**
+- `--year YYYY` — Update a specific year instead of the current year (e.g., to correct a previous year's data). The HTML file for that year must already exist.
 
 **What it does:**
 1. Reads most recent Excel file
-2. Generates JSON: `data-release-calendar-YYYY.txt`
+2. Generates JSON from the year's worksheet: `data-release-calendar-YYYY.txt`
 3. Updates HTML: `data-release-calendar-YYYY.shtml`
    - Excel download link
    - "Last updated on [date]" text
+
+`YYYY` is the current year unless `--year` is given. Note that the HTML link and "Last updated" date are updated for the chosen year too, even if it's a past year.
 
 ### Initialize New Year
 
@@ -493,6 +498,9 @@ setup.cfg                        # Entry point: drc = pds.en_ops_utils.drc.cli:m
 ---
 
 ## Version History
+
+**v2.1** (2026-11-11)
+- `--update-files` accepts optional `--year YYYY` to update a previous year's HTML and JSON
 
 **v2.0** (2026-08-19) — Major refactoring
 - Added `DRCExcelFile` dataclass for better encapsulation
