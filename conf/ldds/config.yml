@@ -27,6 +27,10 @@ ldd-ebt:
   name: "Earth-Based Telescope"
   description: |
     The Earth-Based Telescope dictionary contains classes, attributes, and rules for specifying the metadata associated with observing parameters, provenance, and geometry relevant to ground-based telescopes on Earth and for Earth-orbiting (or Lagrange point) telescopes.
+ldd-epncore:
+  name: "EPNCore"
+  description: |
+    This LDD contains the EPNcore dictionary, as defined in the IVOA specification, with few design adjustments.
 ldd-exo:
   description: |
     The exoPlanet dictionary (namespace: exo) contains classes, attributes, and rules for specifying metadata associated with exoPlanet stars and planets. The dictionary can provide guidance on mapping multiband arrays.
@@ -85,6 +89,10 @@ ldd-rings:
   name: "Rings"
   description: |
     The Rings dictionary contains classes supporting planetary ring observations including ring-specific geometric parameters.
+ldd-samp:
+  name: "Sample"
+  description: |
+    The Sample LDD contains classes, attributes, and rules for characterizing returned and analog physical samples.
 ldd-sb:
   name: "Small Bodies"
   description: |
