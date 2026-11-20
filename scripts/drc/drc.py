@@ -850,7 +850,7 @@ def process_excel_cell(j, cell, data_row, row_index, excel_file):
         data_row[j - 1] = value
     elif j == 7:  # Column H: Link
         actual_date = cell.parent.cell(row=row_index, column=7).value  # Column G
-        if isinstance(actual_date, datetime) and cell.value != 'Link':
+        if actual_date is not None and cell.value != 'Link':
             logger.warning(
                 'Actual Release Date is set but Link is %r '
                 'in row %d of worksheet "%s".',
