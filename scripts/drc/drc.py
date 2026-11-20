@@ -408,7 +408,7 @@ class DRCService:
 
         for path in self.drc_dir.glob(DRCExcelFile.get_filename_glob()):
             excel_file = DRCExcelFile.from_path(path)
-            if not excel_file or excel_file.date >= cutoff_date:
+            if not excel_file or excel_file.filename != path.name or excel_file.date >= cutoff_date:
                 continue
             if excel_file == latest:
                 logger.info('Keeping %s (latest)', excel_file.filename)
